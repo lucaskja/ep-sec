@@ -38,24 +38,58 @@ function Run-HillBreaker {
     }
 }
 
-# Process known texts
-Write-Host "Processing known texts..." -ForegroundColor Cyan
-$knownTexts = Get-ChildItem -Path "$ProjectDir\..\textos_conhecidos\Cifrado\Hill" -Filter "*.txt"
-foreach ($file in $knownTexts) {
-    # Try different key sizes
-    foreach ($keySize in 2, 3, 4, 5) {
-        Run-HillBreaker -FilePath $file.FullName -KeySize $keySize -OutputPrefix "known"
-    }
+# Process known texts with correct key sizes
+Write-Host "Processing known texts with correct key sizes..." -ForegroundColor Cyan
+
+# Grupo02_2 files use 2x2 matrices
+$knownTexts2x2 = Get-ChildItem -Path "$ProjectDir\..\textos_conhecidos\Cifrado\Hill" -Filter "Grupo02_2*.txt"
+foreach ($file in $knownTexts2x2) {
+    Run-HillBreaker -FilePath $file.FullName -KeySize 2 -OutputPrefix "known"
 }
 
-# Process unknown texts
-Write-Host "Processing unknown texts..." -ForegroundColor Cyan
-$unknownTexts = Get-ChildItem -Path "$ProjectDir\..\textos_desconhecidos\Cifrado\Hill" -Filter "*.txt"
-foreach ($file in $unknownTexts) {
-    # Try different key sizes
-    foreach ($keySize in 2, 3, 4, 5) {
-        Run-HillBreaker -FilePath $file.FullName -KeySize $keySize -OutputPrefix "unknown"
-    }
+# Grupo02_3 files use 3x3 matrices
+$knownTexts3x3 = Get-ChildItem -Path "$ProjectDir\..\textos_conhecidos\Cifrado\Hill" -Filter "Grupo02_3*.txt"
+foreach ($file in $knownTexts3x3) {
+    Run-HillBreaker -FilePath $file.FullName -KeySize 3 -OutputPrefix "known"
+}
+
+# Grupo02_4 files use 4x4 matrices
+$knownTexts4x4 = Get-ChildItem -Path "$ProjectDir\..\textos_conhecidos\Cifrado\Hill" -Filter "Grupo02_4*.txt"
+foreach ($file in $knownTexts4x4) {
+    Run-HillBreaker -FilePath $file.FullName -KeySize 4 -OutputPrefix "known"
+}
+
+# Grupo02_5 files use 5x5 matrices
+$knownTexts5x5 = Get-ChildItem -Path "$ProjectDir\..\textos_conhecidos\Cifrado\Hill" -Filter "Grupo02_5*.txt"
+foreach ($file in $knownTexts5x5) {
+    Run-HillBreaker -FilePath $file.FullName -KeySize 5 -OutputPrefix "known"
+}
+
+# Process unknown texts with correct key sizes
+Write-Host "Processing unknown texts with correct key sizes..." -ForegroundColor Cyan
+
+# Grupo02_2 files use 2x2 matrices
+$unknownTexts2x2 = Get-ChildItem -Path "$ProjectDir\..\textos_desconhecidos\Cifrado\Hill" -Filter "Grupo02_2*.txt"
+foreach ($file in $unknownTexts2x2) {
+    Run-HillBreaker -FilePath $file.FullName -KeySize 2 -OutputPrefix "unknown"
+}
+
+# Grupo02_3 files use 3x3 matrices
+$unknownTexts3x3 = Get-ChildItem -Path "$ProjectDir\..\textos_desconhecidos\Cifrado\Hill" -Filter "Grupo02_3*.txt"
+foreach ($file in $unknownTexts3x3) {
+    Run-HillBreaker -FilePath $file.FullName -KeySize 3 -OutputPrefix "unknown"
+}
+
+# Grupo02_4 files use 4x4 matrices
+$unknownTexts4x4 = Get-ChildItem -Path "$ProjectDir\..\textos_desconhecidos\Cifrado\Hill" -Filter "Grupo02_4*.txt"
+foreach ($file in $unknownTexts4x4) {
+    Run-HillBreaker -FilePath $file.FullName -KeySize 4 -OutputPrefix "unknown"
+}
+
+# Grupo02_5 files use 5x5 matrices
+$unknownTexts5x5 = Get-ChildItem -Path "$ProjectDir\..\textos_desconhecidos\Cifrado\Hill" -Filter "Grupo02_5*.txt"
+foreach ($file in $unknownTexts5x5) {
+    Run-HillBreaker -FilePath $file.FullName -KeySize 5 -OutputPrefix "unknown"
 }
 
 Write-Host "All processing complete!" -ForegroundColor Green

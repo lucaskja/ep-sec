@@ -35,22 +35,66 @@ run_hill_breaker() {
     fi
 }
 
-# Process known texts
-echo -e "\033[0;36mProcessing known texts...\033[0m"
-for file in "$PROJECT_DIR/../textos_conhecidos/Cifrado/Hill"/*.txt; do
-    # Try different key sizes
-    for key_size in 2 3 4 5; do
-        run_hill_breaker "$file" "$key_size" "auto" "known"
-    done
+# Process known texts with correct key sizes
+echo -e "\033[0;36mProcessing known texts with correct key sizes...\033[0m"
+
+# Grupo02_2 files use 2x2 matrices
+for file in "$PROJECT_DIR/../textos_conhecidos/Cifrado/Hill/Grupo02_2"*.txt; do
+    if [ -f "$file" ]; then
+        run_hill_breaker "$file" 2 "auto" "known"
+    fi
 done
 
-# Process unknown texts
-echo -e "\033[0;36mProcessing unknown texts...\033[0m"
-for file in "$PROJECT_DIR/../textos_desconhecidos/Cifrado/Hill"/*.txt; do
-    # Try different key sizes
-    for key_size in 2 3 4 5; do
-        run_hill_breaker "$file" "$key_size" "auto" "unknown"
-    done
+# Grupo02_3 files use 3x3 matrices
+for file in "$PROJECT_DIR/../textos_conhecidos/Cifrado/Hill/Grupo02_3"*.txt; do
+    if [ -f "$file" ]; then
+        run_hill_breaker "$file" 3 "auto" "known"
+    fi
+done
+
+# Grupo02_4 files use 4x4 matrices
+for file in "$PROJECT_DIR/../textos_conhecidos/Cifrado/Hill/Grupo02_4"*.txt; do
+    if [ -f "$file" ]; then
+        run_hill_breaker "$file" 4 "auto" "known"
+    fi
+done
+
+# Grupo02_5 files use 5x5 matrices
+for file in "$PROJECT_DIR/../textos_conhecidos/Cifrado/Hill/Grupo02_5"*.txt; do
+    if [ -f "$file" ]; then
+        run_hill_breaker "$file" 5 "auto" "known"
+    fi
+done
+
+# Process unknown texts with correct key sizes
+echo -e "\033[0;36mProcessing unknown texts with correct key sizes...\033[0m"
+
+# Grupo02_2 files use 2x2 matrices
+for file in "$PROJECT_DIR/../textos_desconhecidos/Cifrado/Hill/Grupo02_2"*.txt; do
+    if [ -f "$file" ]; then
+        run_hill_breaker "$file" 2 "auto" "unknown"
+    fi
+done
+
+# Grupo02_3 files use 3x3 matrices
+for file in "$PROJECT_DIR/../textos_desconhecidos/Cifrado/Hill/Grupo02_3"*.txt; do
+    if [ -f "$file" ]; then
+        run_hill_breaker "$file" 3 "auto" "unknown"
+    fi
+done
+
+# Grupo02_4 files use 4x4 matrices
+for file in "$PROJECT_DIR/../textos_desconhecidos/Cifrado/Hill/Grupo02_4"*.txt; do
+    if [ -f "$file" ]; then
+        run_hill_breaker "$file" 4 "auto" "unknown"
+    fi
+done
+
+# Grupo02_5 files use 5x5 matrices
+for file in "$PROJECT_DIR/../textos_desconhecidos/Cifrado/Hill/Grupo02_5"*.txt; do
+    if [ -f "$file" ]; then
+        run_hill_breaker "$file" 5 "auto" "unknown"
+    fi
 done
 
 echo -e "\033[0;32mAll processing complete!\033[0m"
