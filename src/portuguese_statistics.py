@@ -45,6 +45,9 @@ THREE_LETTER_WORDS = {
     'ELE': 0.07, 'DAS': 0.07, 'SUA': 0.06, 'SEU': 0.06, 'SEM': 0.05
 }
 
+# Combined dictionary of common short words for easier access
+SHORT_WORDS = {**ONE_LETTER_WORDS, **TWO_LETTER_WORDS, **THREE_LETTER_WORDS}
+
 # Letter probabilities at the beginning of words
 INITIAL_LETTER_FREQUENCIES = {
     'D': 12, 'A': 11, 'E': 11, 'C': 8, 'P': 7, 'S': 6, 'O': 6, 'M': 6,
