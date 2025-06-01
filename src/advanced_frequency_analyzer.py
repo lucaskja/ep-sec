@@ -18,6 +18,16 @@ import itertools
 from unidecode import unidecode
 import sympy as sp
 
+# Import Portuguese n-grams
+try:
+    from src.portuguese_ngrams import COMMON_NGRAMS, LETTER_FREQUENCIES, DIGRAMS, TRIGRAMS, QUADGRAMS, PENTAGRAMS
+except ImportError:
+    try:
+        from portuguese_ngrams import COMMON_NGRAMS, LETTER_FREQUENCIES, DIGRAMS, TRIGRAMS, QUADGRAMS, PENTAGRAMS
+    except ImportError:
+        print("Warning: portuguese_ngrams.py not found. Using default n-grams.")
+
+
 # Import utility functions if available
 try:
     from src.utils import (
@@ -123,21 +133,26 @@ class AdvancedFrequencyAnalyzer:
         
     def setup_common_ngrams(self):
         """Set up common n-grams for Portuguese language based on matrix size."""
-        # Common Portuguese n-grams by matrix size
-        self.common_ngrams = {
-            3: ["QUE", "ENT", "COM", "ROS", "IST", "ADO", 
-                "ELA", "PRA", "INH", "EST", "NTE", "ERA", "AND", "UMA", "STA", 
-                "RES", "MEN", "CON", "DOS", "ANT"],
-            4: ["DESE", "OSSE", "ROTA", "ADOU", "PORT", "ENTE", "MENT", "COMO", 
-                "BOAS", "CASO", "PREM", "ACAO", "IDAD", "NTOS", "AVEL"],
-            5: ["PORTE", "LIGAR", "QUESE", "ENTRE", "CONSE", "SAUDA", "FELIZ", 
-                "BOMDI", "MUNDO", "TEXTO"]
-        }
+        # Use extracted n-grams if available
+        if 'COMMON_NGRAMS' in globals():
+            self.common_ngrams = COMMON_NGRAMS
+        else:
+            # Fallback to default n-grams
+            self.common_ngrams = {
+                3: ["QUE", "ENT", "COM", "ROS", "IST", "ADO", 
+                    "ELA", "PRA", "INH", "EST", "NTE", "ERA", "AND", "UMA", "STA", 
+                    "RES", "MEN", "CON", "DOS", "ANT"],
+                4: ["VOCE", "INHA", "PARA", "AQUE", "EVOC", "ANDO", "OQUE", "ESTA", 
+                    "TAVA", "ENTE", "EQUE", "RQUE", "MINH", "OCES", "ENAO", "ENTA", 
+                    "MENT", "QUEE", "STAV", "NHAM"],
+                5: ["EVOCE", "MINHA", "VOCES", "STAVA", "INHAM", "ESTAV", "OVOCE", 
+                    "ORQUE", "TINHA", "NHAMA", "PORQU", "HAMAE", "AQUEL", "UEVOC", 
+                    "QUEVO", "UANDO", "QUAND", "AVOCE", "DISSE", "EPOIS"]
+            }
         
         # Common Portuguese words for validation
         self.common_words = ["DE", "QUE", "E", "A", "O", "DA", "DO", "EM", "PARA", "COM",
                             "NAO", "UMA", "OS", "NO", "SE", "NA", "POR", "MAIS", "AS", "DOS"]
-    
     def preprocess_text(self, text: str) -> str:
         """
         Preprocess text by removing non-alphabetic characters, stripping accents,
@@ -611,7 +626,7 @@ class AdvancedFrequencyAnalyzer:
         letter_score = 0
         for letter, count in letter_counts.items():
             freq = count / len(decrypted_text)
-            expected_freq = LETTER_FREQUENCIES.get(letter, 0) / 100
+            expected_freq = LETTER_FREQUENCIES.get(letter, 0) / 100 if 'LETTER_FREQUENCIES' in globals() else 0.001, 0) / 100
             # Score based on how close the frequency is to expected
             similarity = 1 - min(abs(freq - expected_freq) / max(expected_freq, 0.001), 1)
             letter_score += similarity
