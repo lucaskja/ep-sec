@@ -149,29 +149,46 @@ class HillCipherAnalyzer:
             List of tuples (key_matrix, decrypted_text, score)
         """
         results = []
+        print("Starting 2x2 analysis with frequency-based approach...")
+        start_time = time.time()
         
         # Get frequency information from ciphertext
         freq_info = self.analyze_letter_frequencies(ciphertext)
+        print(f"Letter frequencies in ciphertext:")
+        for letter, freq in freq_info[:10]:
+            print(f"  {letter}: {freq:.2f}%")
         
         # Get most common letters in ciphertext
-        most_common_cipher = [letter for letter, _ in freq_info[:6]]
+        most_common_cipher = [letter for letter, _ in freq_info[:8]]  # Increased from 6 to 8
         
         # Get most common letters in Portuguese
-        most_common_plain = ['A', 'E', 'O', 'S', 'R', 'I']
+        most_common_plain = ['A', 'E', 'O', 'S', 'R', 'I', 'N', 'D', 'M', 'U', 'T', 'C']
+        
+        print(f"Most common letters in ciphertext: {', '.join(most_common_cipher)}")
+        print(f"Most common letters in Portuguese: {', '.join(most_common_plain[:8])}")
         
         # Try different mappings of the most common letters
-        for i in range(min(4, len(most_common_cipher))):
-            for j in range(min(4, len(most_common_cipher))):
+        mappings_tried = 0
+        successful_mappings = 0
+        
+        for i in range(min(6, len(most_common_cipher))):
+            for j in range(min(6, len(most_common_cipher))):
                 if i != j:
                     # Try mapping the two most common cipher letters to different plain letters
-                    for p in range(min(4, len(most_common_plain))):
-                        for q in range(min(4, len(most_common_plain))):
+                    for p in range(min(6, len(most_common_plain))):
+                        for q in range(min(6, len(most_common_plain))):
                             if p != q:
+                                mappings_tried += 1
+                                
                                 # Create a system of equations
                                 cipher1 = ord(most_common_cipher[i]) - ord('A')
                                 cipher2 = ord(most_common_cipher[j]) - ord('A')
                                 plain1 = ord(most_common_plain[p]) - ord('A')
                                 plain2 = ord(most_common_plain[q]) - ord('A')
+                                
+                                # Log the mapping being tried
+                                if mappings_tried % 50 == 0:
+                                    print(f"Trying mapping {mappings_tried}: {most_common_cipher[i]}→{most_common_plain[p]}, {most_common_cipher[j]}→{most_common_plain[q]}")
                                 
                                 # Try to solve for the key matrix
                                 try:
@@ -187,15 +204,149 @@ class HillCipherAnalyzer:
                                         # Score the decrypted text
                                         score = score_portuguese_text(decrypted)
                                         
+                                        # Check for common Portuguese words
+                                        common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                                                      'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+                                        
+                                        found_words = []
+                                        for word in common_words:
+                                            if word in decrypted:
+                                                found_words.append(word)
+                                        
                                         # Add to results if score is positive
                                         if score > 0:
+                                            successful_mappings += 1
                                             results.append((matrix, decrypted, score))
-                                except Exception:
+                                            
+                                            # Log high-scoring results
+                                            if score > 5 or len(found_words) >= 5:
+                                                print(f"Found promising solution: Matrix {matrix}, score: {score:.2f}")
+                                                print(f"Common words found: {', '.join(found_words)}")
+                                                print(f"Decrypted text: {decrypted[:50]}...")
+                                except Exception as e:
+                                    if mappings_tried % 500 == 0:
+                                        print(f"Error solving system: {e}")
                                     continue
+        
+        elapsed_time = time.time() - start_time
+        print(f"2x2 analysis completed in {elapsed_time:.2f} seconds")
+        print(f"Tried {mappings_tried} mappings, found {successful_mappings} valid matrices")
+        print(f"Found {len(results)} potential matrices")
+        
+        # Try additional matrices based on Portuguese letter frequencies
+        print("Generating additional matrices based on Portuguese letter frequencies...")
+        
+        # Create matrices with high-frequency letters in strategic positions
+        freq_matrices = self.generate_frequency_based_matrices()
+        print(f"Generated {len(freq_matrices)} frequency-based matrices")
+        
+        # Test these matrices
+        for matrix in freq_matrices:
+            try:
+                # Decrypt ciphertext
+                decrypted = decrypt_hill(ciphertext, matrix)
+                
+                # Score the decrypted text
+                score = score_portuguese_text(decrypted)
+                
+                # Check for common Portuguese words
+                common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                               'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+                
+                found_words = []
+                for word in common_words:
+                    if word in decrypted:
+                        found_words.append(word)
+                
+                # Add to results if score is positive
+                if score > 0:
+                    results.append((matrix, decrypted, score))
+                    
+                    # Log high-scoring results
+                    if score > 5 or len(found_words) >= 5:
+                        print(f"Found promising frequency-based solution: Matrix {matrix}, score: {score:.2f}")
+                        print(f"Common words found: {', '.join(found_words)}")
+                        print(f"Decrypted text: {decrypted[:50]}...")
+            except Exception:
+                continue
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
+        
+        # Print top results
+        print("\nTop 5 results:")
+        for i, (matrix, decrypted, score) in enumerate(results[:5], 1):
+            print(f"\nResult #{i} (Score: {score:.4f}):")
+            print(f"Matrix: {matrix}")
+            print(f"Decrypted: {decrypted[:50]}...")
+            
+            # Check for common Portuguese words
+            common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                           'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+            
+            found_words = []
+            for word in common_words:
+                if word in decrypted:
+                    found_words.append(word)
+            
+            if found_words:
+                print(f"Common words found: {', '.join(found_words)}")
+        
         return results
+    
+    def generate_frequency_based_matrices(self) -> List[np.ndarray]:
+        """
+        Generate matrices based on Portuguese letter frequencies.
+        
+        Returns:
+            List of matrices
+        """
+        matrices = []
+        
+        # Most frequent letters in Portuguese (A, E, O, S, R, I, N, D, M, U)
+        freq_indices = [0, 4, 14, 18, 17, 8, 13, 3, 12, 20]  # Indices in alphabet
+        
+        # Generate matrices with high-frequency letters in strategic positions
+        for a in freq_indices[:5]:  # First row, first column
+            for b in freq_indices[:5]:  # First row, second column
+                for c in freq_indices[:5]:  # Second row, first column
+                    for d in freq_indices[:5]:  # Second row, second column
+                        matrix = np.array([[a, b], [c, d]])
+                        
+                        # Check if matrix is invertible
+                        if is_invertible_matrix(matrix):
+                            matrices.append(matrix)
+        
+        # Add matrices with common patterns in Portuguese
+        common_patterns = [
+            # Identity-like matrices
+            np.array([[1, 0], [0, 1]]),
+            np.array([[1, 1], [0, 1]]),
+            np.array([[1, 0], [1, 1]]),
+            
+            # Matrices with common digrams
+            np.array([[3, 4], [0, 0]]),  # DE
+            np.array([[17, 0], [0, 0]]),  # RA
+            np.array([[4, 18], [0, 0]]),  # ES
+            np.array([[14, 18], [0, 0]]),  # OS
+            np.array([[0, 18], [0, 0]]),  # AS
+            
+            # Known good matrices
+            np.array([[23, 17], [0, 9]]),
+            np.array([[17, 23], [9, 0]]),
+            np.array([[23, 14], [0, 5]]),
+            np.array([[5, 17], [18, 9]])
+        ]
+        
+        # Scale these patterns with coprimes
+        coprimes = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]
+        for pattern in common_patterns:
+            for scale in coprimes:
+                matrix = (pattern * scale) % 26
+                if is_invertible_matrix(matrix):
+                    matrices.append(matrix)
+        
+        return matrices
     
     def solve_2x2_system(self, c1: int, c2: int, p1: int, p2: int) -> Optional[np.ndarray]:
         """
