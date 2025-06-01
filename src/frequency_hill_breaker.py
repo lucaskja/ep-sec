@@ -245,7 +245,7 @@ def recover_key(P_stack: np.ndarray, C_stack: np.ndarray) -> Optional[np.ndarray
     
     return None
 
-def score_decryption(decrypted_text: str, normalized_text: str) -> float:
+def score_decryption(decrypted_text: str, normalized_text: str) -> Tuple[float, bool]:
     """
     Score the decryption based on n-gram frequencies and substring matching.
     
@@ -254,73 +254,90 @@ def score_decryption(decrypted_text: str, normalized_text: str) -> float:
         normalized_text: Normalized text for substring matching
         
     Returns:
-        Score (higher is better)
+        Tuple of (score, is_valid_match)
     """
     score = 0
+    is_valid_match = False
     
-    # Check for common Portuguese words
-    common_words = ["QUE", "PARA", "COM", "UMA", "ELA", "ERA", "MINHA", "MAS", "POR", "MAIS",
-                   "SUA", "QUANDO", "PORQUE", "TINHA", "ESTAVA", "ELE", "DISSE", "COMO", "FOI"]
+    # Check for substrings in normalized text - this is the primary validation
+    min_match_length = 15  # Minimum length for a valid substring match
     
-    for word in common_words:
-        count = decrypted_text.count(word)
-        if count > 0:
-            score += count * len(word)
-    
-    # Check for substrings in normalized text - use a more efficient approach
-    # Instead of checking all possible substrings, check a sample of them
-    max_checks = 100  # Limit the number of substring checks to save memory
-    check_count = 0
-    
-    # Check longer substrings first (more valuable matches)
-    for length in range(min(50, len(decrypted_text) // 2), 9, -5):  # Step by 5 to reduce checks
-        if check_count >= max_checks:
-            break
-            
-        # Take samples at regular intervals
-        step = max(1, len(decrypted_text) // 20)  # Check about 20 positions
-        
-        for i in range(0, len(decrypted_text) - length + 1, step):
-            if check_count >= max_checks:
-                break
-                
-            substring = decrypted_text[i:i+length]
+    # Try to find increasingly longer matches
+    for length in range(min_match_length, min(100, len(decrypted_text)), 5):
+        # Check multiple positions in the decrypted text
+        for start_pos in range(0, min(200, len(decrypted_text) - length), 10):
+            substring = decrypted_text[start_pos:start_pos+length]
             if substring in normalized_text:
-                score += length * 2
-                # If we find a long substring, that's a very good sign
-                if length >= 20:
-                    score += 100
-                break
+                print(f"Found matching substring in normalized text: '{substring}'")
+                score += length * 5
+                is_valid_match = True
                 
-            check_count += 1
+                # Try to extend the match
+                extended_length = length
+                while start_pos + extended_length < len(decrypted_text) and extended_length < 200:
+                    extended_length += 5
+                    extended_substring = decrypted_text[start_pos:start_pos+extended_length]
+                    if extended_substring in normalized_text:
+                        print(f"Extended match to length {extended_length}")
+                        score += 25  # Bonus for longer matches
+                    else:
+                        break
+                
+                # If we found a substantial match, we can return early
+                if length >= 30:
+                    return score, True
     
-    # Check letter frequencies - use a more efficient approach
+    # If we didn't find a direct substring match, check for common Portuguese words
+    if not is_valid_match:
+        common_words = ["QUE", "PARA", "COM", "UMA", "ELA", "ERA", "MINHA", "MAS", "POR", "MAIS",
+                       "SUA", "QUANDO", "PORQUE", "TINHA", "ESTAVA", "ELE", "DISSE", "COMO", "FOI"]
+        
+        word_count = 0
+        for word in common_words:
+            count = decrypted_text.count(word)
+            if count > 0:
+                word_count += count
+                score += count * len(word)
+        
+        # If we find many common words, it might still be a valid match
+        if word_count >= 5:
+            print(f"Found {word_count} common Portuguese words")
+            is_valid_match = True
+    
+    # Check letter frequencies from the data file
     letter_freqs = load_ngram_frequencies(1)
     if letter_freqs:
-        # Only check a sample of letters to save computation
+        # Sample the text to save computation
         sample_size = min(1000, len(decrypted_text))
         sample_step = max(1, len(decrypted_text) // sample_size)
         
         letter_counts = Counter(decrypted_text[::sample_step])
-        total_letters = len(letter_counts)
+        total_letters = sum(letter_counts.values())
         
+        freq_score = 0
         for letter, count in letter_counts.items():
             observed_freq = count / total_letters
             expected_freq = letter_freqs.get(letter, 0)
             
             # Score based on how close the observed frequency is to the expected frequency
             similarity = 1 - min(abs(observed_freq - expected_freq) / max(expected_freq, 0.001), 1)
-            score += similarity * 10
+            freq_score += similarity * 10
+        
+        # Normalize the frequency score
+        freq_score = freq_score / len(letter_counts) if letter_counts else 0
+        score += freq_score
     
     # Check vowel ratio (Portuguese has ~46% vowels)
     vowels = sum(1 for c in decrypted_text[:1000] if c in 'AEIOU')  # Only check first 1000 chars
     vowel_ratio = vowels / min(1000, len(decrypted_text)) if decrypted_text else 0
+    
+    # Portuguese texts typically have 40-50% vowels
     if 0.4 <= vowel_ratio <= 0.5:
         score += 50
     elif 0.35 <= vowel_ratio <= 0.55:
         score += 25
     
-    return score
+    return score, is_valid_match
 
 def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -> Optional[np.ndarray]:
     """
@@ -370,22 +387,22 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
             # Decrypt ciphertext with the key
             decrypted = decrypt_hill(clean_ciphertext, key)
             
-            # Score decryption
-            score = score_decryption(decrypted, normalized_text)
+            # Score decryption and check if it's a valid match
+            score, is_valid_match = score_decryption(decrypted, normalized_text)
             
             print(f"Testing known matrix:\n{key}")
-            print(f"Score: {score:.2f}")
+            print(f"Score: {score:.2f}, Valid match: {is_valid_match}")
             print(f"Decryption sample: {decrypted[:50]}...")
             
-            # If the score is high, we found a good key
-            if score > 50:
-                print(f"Found good key with score {score:.2f}")
+            # If we found a valid match, we can return this key
+            if is_valid_match:
+                print(f"Found valid key with score {score:.2f}")
                 return key
     elif matrix_size == 3:
         known_matrices = [
             np.array([[6, 24, 1], [13, 16, 10], [20, 17, 15]]),  # Common 3x3 matrix
             np.array([[2, 4, 12], [9, 1, 6], [7, 5, 3]]),        # Another common matrix
-            np.array([[3, 10, 20], [20, 19, 17], [23, 78, 17]])  # Another common matrix
+            np.array([[3, 10, 20], [20, 19, 17], [23, 7, 17]])   # Another common matrix
         ]
         
         for key in known_matrices:
@@ -393,16 +410,16 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
                 # Decrypt ciphertext with the key
                 decrypted = decrypt_hill(clean_ciphertext, key)
                 
-                # Score decryption
-                score = score_decryption(decrypted, normalized_text)
+                # Score decryption and check if it's a valid match
+                score, is_valid_match = score_decryption(decrypted, normalized_text)
                 
                 print(f"Testing known matrix:\n{key}")
-                print(f"Score: {score:.2f}")
+                print(f"Score: {score:.2f}, Valid match: {is_valid_match}")
                 print(f"Decryption sample: {decrypted[:50]}...")
                 
-                # If the score is high, we found a good key
-                if score > 50:
-                    print(f"Found good key with score {score:.2f}")
+                # If we found a valid match, we can return this key
+                if is_valid_match:
+                    print(f"Found valid key with score {score:.2f}")
                     return key
             except Exception as e:
                 print(f"Error testing known matrix: {e}")
@@ -420,6 +437,7 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
     # Try each matrix pair
     best_key = None
     best_score = 0
+    found_valid_match = False
     
     print(f"Testing {len(matrices)} matrix pairs...")
     
@@ -435,21 +453,35 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
         # Decrypt ciphertext with the key
         decrypted = decrypt_hill(clean_ciphertext, key)
         
-        # Score decryption
-        score = score_decryption(decrypted, normalized_text)
+        # Score decryption and check if it's a valid match
+        score, is_valid_match = score_decryption(decrypted, normalized_text)
         
-        if score > best_score:
+        # If this is a valid match and better than what we've found so far
+        if is_valid_match and score > best_score:
             best_score = score
             best_key = key
-            print(f"Found better key with score {score:.2f}:")
+            found_valid_match = True
+            print(f"Found valid key with score {score:.2f}:")
             print(f"Key matrix:\n{key}")
             print(f"Decryption sample: {decrypted[:50]}...")
             
             # If the score is very high, we can stop early
-            if score > 100:
+            if score > 200:
                 break
+        # If not a valid match but still better than what we have
+        elif not found_valid_match and score > best_score:
+            best_score = score
+            best_key = key
+            print(f"Found potential key with score {score:.2f}:")
+            print(f"Key matrix:\n{key}")
+            print(f"Decryption sample: {decrypted[:50]}...")
     
-    print(f"Found {len([m for m in matrices if recover_key(*m) is not None])} potential keys for {matrix_size}x{matrix_size} matrix")
+    valid_keys = sum(1 for m in matrices if recover_key(*m) is not None)
+    valid_matches = sum(1 for m in matrices if recover_key(*m) is not None and 
+                       score_decryption(decrypt_hill(clean_ciphertext, recover_key(*m)), normalized_text)[1])
+    
+    print(f"Found {valid_keys} potential keys for {matrix_size}x{matrix_size} matrix")
+    print(f"Found {valid_matches} valid matches in normalized text")
     
     return best_key
 
@@ -503,9 +535,19 @@ def main():
         with open(decrypted_path, 'w') as f:
             f.write(decrypted)
         
+        # Check if the decryption is valid
+        score, is_valid_match = score_decryption(decrypted, normalized_text)
+        
         print(f"Matrix saved to {matrix_path}")
         print(f"Decrypted text saved to {decrypted_path}")
+        print(f"Decryption score: {score:.2f}, Valid match: {is_valid_match}")
         print(f"Decrypted text (first 100 chars): {decrypted[:100]}...")
+        
+        # If it's not a valid match, warn the user
+        if not is_valid_match:
+            print("\nWARNING: The decryption does not appear to be a valid Portuguese text!")
+            print("No substring of the decryption was found in the normalized text.")
+            print("Consider trying a different approach or matrix size.")
     else:
         print("No key matrix found.")
 
