@@ -626,7 +626,7 @@ class AdvancedFrequencyAnalyzer:
         letter_score = 0
         for letter, count in letter_counts.items():
             freq = count / len(decrypted_text)
-            expected_freq = LETTER_FREQUENCIES.get(letter, 0) / 100 if 'LETTER_FREQUENCIES' in globals() else 0.001, 0) / 100
+            expected_freq = LETTER_FREQUENCIES.get(letter, 0) / 100 if 'LETTER_FREQUENCIES' in globals() else 0.001
             # Score based on how close the frequency is to expected
             similarity = 1 - min(abs(freq - expected_freq) / max(expected_freq, 0.001), 1)
             letter_score += similarity

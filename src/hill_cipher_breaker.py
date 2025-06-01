@@ -552,10 +552,18 @@ class LanguageValidator:
         """
         self.dictionary = set()
         if dictionary_path and os.path.exists(dictionary_path):
-            with open(dictionary_path, 'r', encoding='utf-8') as f:
-                self.dictionary = set(word.strip().upper() for word in f)
-        
-        # Frequências de letras em português
+            try:
+                with open(dictionary_path, 'r', encoding='utf-8') as f:
+                    self.dictionary = set(word.strip().upper() for word in f)
+            except Exception as e:
+                print(f"Warning: Could not load dictionary from {dictionary_path}: {e}")
+                # Create a small dictionary with common Portuguese words
+                self.dictionary = {"DE", "A", "O", "QUE", "E", "DO", "DA", "EM", "UM", "PARA", "COM",
+                                  "NAO", "UMA", "OS", "NO", "SE", "NA", "POR", "MAIS", "AS", "DOS"}
+        else:
+            # Create a small dictionary with common Portuguese words
+            self.dictionary = {"DE", "A", "O", "QUE", "E", "DO", "DA", "EM", "UM", "PARA", "COM",
+                              "NAO", "UMA", "OS", "NO", "SE", "NA", "POR", "MAIS", "AS", "DOS"}
         self.letter_freq = {
             'A': 0.1463, 'B': 0.0104, 'C': 0.0388, 'D': 0.0499,
             'E': 0.1257, 'F': 0.0102, 'G': 0.0130, 'H': 0.0128,
