@@ -6,11 +6,16 @@ This script runs the enhanced Hill cipher breaker on all available ciphertexts.
 """
 
 import os
+import sys
 import time
 import argparse
 import logging
 from typing import List
 
+# Add the parent directory to the path so Python can find the modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Now import our modules
 from src.enhanced_hill_breaker import EnhancedHillBreaker
 
 def main():

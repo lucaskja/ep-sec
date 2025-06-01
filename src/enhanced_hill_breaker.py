@@ -19,16 +19,29 @@ import pickle
 import time
 import logging
 import itertools
+import sys
 from typing import List, Dict, Tuple, Optional, Set
 from collections import Counter
 
-# Import utility functions
-from src.utils import (
-    text_to_numbers, numbers_to_text, is_invertible_matrix,
-    mod_inverse, matrix_mod_inverse, ALPHABET_SIZE
-)
-from src.hill_cipher import decrypt_hill, known_plaintext_attack
-from src.portuguese_language_model import PortugueseLanguageModel
+# Add the parent directory to the path so Python can find the modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import utility functions with fallback
+try:
+    from src.utils import (
+        text_to_numbers, numbers_to_text, is_invertible_matrix,
+        mod_inverse, matrix_mod_inverse, ALPHABET_SIZE
+    )
+    from src.hill_cipher import decrypt_hill, known_plaintext_attack
+    from src.portuguese_language_model import PortugueseLanguageModel
+except ImportError:
+    # If that fails, try relative import
+    from utils import (
+        text_to_numbers, numbers_to_text, is_invertible_matrix,
+        mod_inverse, matrix_mod_inverse, ALPHABET_SIZE
+    )
+    from hill_cipher import decrypt_hill, known_plaintext_attack
+    from portuguese_language_model import PortugueseLanguageModel
 
 class EnhancedHillBreaker:
     """Enhanced Hill Cipher Breaker with advanced techniques."""

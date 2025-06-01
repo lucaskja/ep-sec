@@ -9,9 +9,13 @@ to improve the quality of decryption results.
 import re
 import pickle
 import os
+import sys
 import numpy as np
 from collections import Counter
 from typing import Dict, List, Tuple, Set
+
+# Add the parent directory to the path so Python can find the modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class PortugueseLanguageModel:
     """Portuguese language model with advanced features for text analysis."""
