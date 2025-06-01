@@ -210,7 +210,7 @@ class EnhancedHillBreaker:
     
     def pattern_based_attack(self, ciphertext: str) -> List[Tuple[np.ndarray, str, float]]:
         """
-        Pattern-based attack using common Portuguese patterns.
+        Pattern-based attack using common Portuguese patterns with improved thread utilization.
         
         Args:
             ciphertext: Encrypted text
@@ -239,28 +239,67 @@ class EnhancedHillBreaker:
             if len(pattern) >= size * size:
                 adjusted_patterns.append(pattern[:size * size])
         
-        # Try each pattern
-        for pattern in adjusted_patterns:
-            try:
-                # Use the pattern as potential plaintext
-                cipher_fragment = ciphertext[:len(pattern)]
+        logging.info(f"Pattern-based attack: Using {len(adjusted_patterns)} patterns")
+        
+        # Process patterns in parallel using a work queue approach
+        if len(adjusted_patterns) > self.num_threads:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+                # Submit each pattern as a separate task
+                future_to_pattern = {executor.submit(self.try_pattern, pattern, ciphertext): pattern 
+                                    for pattern in adjusted_patterns}
                 
-                key_matrix = known_plaintext_attack(pattern, cipher_fragment, size)
-                decrypted = decrypt_hill(ciphertext, key_matrix)
-                score = self.language_model.score_text(decrypted)
-                
-                if score > 0:
-                    results.append((key_matrix, decrypted, score))
-            except Exception:
-                continue
+                # Process results as they complete
+                for future in concurrent.futures.as_completed(future_to_pattern):
+                    pattern = future_to_pattern[future]
+                    try:
+                        result = future.result()
+                        if result:
+                            results.append(result)
+                    except Exception as e:
+                        logging.error(f"Error processing pattern {pattern}: {e}")
+        else:
+            # If we have fewer patterns than threads, process sequentially
+            for pattern in adjusted_patterns:
+                try:
+                    result = self.try_pattern(pattern, ciphertext)
+                    if result:
+                        results.append(result)
+                except Exception as e:
+                    logging.error(f"Error processing pattern {pattern}: {e}")
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results[:50]  # Return top 50 candidates (increased from 5)
+        return results[:50]  # Return top 50 candidates
+    
+    def try_pattern(self, pattern: str, ciphertext: str) -> Optional[Tuple[np.ndarray, str, float]]:
+        """
+        Try a specific pattern for pattern-based attack.
+        
+        Args:
+            pattern: Pattern to try
+            ciphertext: Encrypted text
+            
+        Returns:
+            Tuple (key_matrix, decrypted_text, score) if successful, None otherwise
+        """
+        try:
+            # Use the pattern as potential plaintext
+            cipher_fragment = ciphertext[:len(pattern)]
+            
+            key_matrix = known_plaintext_attack(pattern, cipher_fragment, self.matrix_size)
+            decrypted = decrypt_hill(ciphertext, key_matrix)
+            score = self.language_model.score_text(decrypted)
+            
+            if score > 0:
+                return (key_matrix, decrypted, score)
+        except Exception:
+            pass
+        
+        return None
     
     def statistical_attack(self, ciphertext: str) -> List[Tuple[np.ndarray, str, float]]:
         """
-        Statistical attack using Portuguese language properties.
+        Statistical attack using Portuguese language properties with improved thread utilization.
         
         Args:
             ciphertext: Encrypted text
@@ -271,33 +310,49 @@ class EnhancedHillBreaker:
         results = []
         
         # Generate matrices based on Portuguese letter frequencies
-        matrices = self.generate_statistical_matrices()
+        # Scale the number of matrices with thread count for better utilization
+        matrices = self.generate_statistical_matrices(self.num_threads * 50)
         
-        # Process matrices in parallel
+        logging.info(f"Statistical attack: Generated {len(matrices)} matrices")
+        
+        # Use a queue-based approach for better thread utilization
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            # Split matrices into chunks
-            chunk_size = max(1, len(matrices) // self.num_threads)
-            chunks = [matrices[i:i+chunk_size] for i in range(0, len(matrices), chunk_size)]
+            # Create smaller chunks for better load balancing
+            optimal_chunk_size = max(10, len(matrices) // (self.num_threads * 5))
+            chunks = [matrices[i:i+optimal_chunk_size] for i in range(0, len(matrices), optimal_chunk_size)]
             
-            # Process each chunk
-            futures = []
-            for chunk in chunks:
-                future = executor.submit(self.process_matrices, chunk, ciphertext)
-                futures.append(future)
+            logging.info(f"Split into {len(chunks)} chunks of size ~{optimal_chunk_size}")
             
-            # Collect results
-            for future in concurrent.futures.as_completed(futures):
-                chunk_results = future.result()
-                results.extend(chunk_results)
+            # Submit all chunks to the executor
+            future_to_chunk = {executor.submit(self.process_matrices, chunk, ciphertext): i for i, chunk in enumerate(chunks)}
+            
+            # Process results as they complete
+            completed = 0
+            for future in concurrent.futures.as_completed(future_to_chunk):
+                chunk_idx = future_to_chunk[future]
+                try:
+                    chunk_results = future.result()
+                    results.extend(chunk_results)
+                    
+                    # Log progress
+                    completed += 1
+                    if completed % 10 == 0 or completed == len(chunks):
+                        logging.info(f"Statistical attack: Processed {completed}/{len(chunks)} chunks ({completed*100/len(chunks):.1f}%)")
+                        
+                except Exception as e:
+                    logging.error(f"Error processing chunk {chunk_idx}: {e}")
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results[:100]  # Return top 100 candidates (increased from 20)
+        return results[:100]  # Return top 100 candidates
     
-    def generate_statistical_matrices(self) -> List[np.ndarray]:
+    def generate_statistical_matrices(self, limit: int = 1000) -> List[np.ndarray]:
         """
         Generate matrices based on Portuguese letter frequencies.
         
+        Args:
+            limit: Maximum number of matrices to generate
+            
         Returns:
             List of matrices
         """
@@ -333,6 +388,20 @@ class EnhancedHillBreaker:
                                     # Check if matrix is invertible
                                     if is_invertible_matrix(matrix):
                                         matrices.append(matrix.copy())
+                                        
+                                        # Add variations to increase diversity
+                                        for _ in range(3):  # Add 3 variations per matrix
+                                            variation = matrix.copy()
+                                            # Modify some elements randomly
+                                            for _ in range(2):
+                                                i, j = np.random.randint(0, 3, 2)
+                                                variation[i, j] = np.random.randint(0, 26)
+                                            
+                                            if is_invertible_matrix(variation):
+                                                matrices.append(variation.copy())
+                                        
+                                        if len(matrices) >= limit:
+                                            return matrices[:limit]
         
         elif size == 4:
             # For 4x4, use block structure
@@ -355,6 +424,20 @@ class EnhancedHillBreaker:
                             # Check if matrix is invertible
                             if is_invertible_matrix(matrix):
                                 matrices.append(matrix.copy())
+                                
+                                # Add variations
+                                for _ in range(5):  # More variations for 4x4
+                                    variation = matrix.copy()
+                                    # Modify some elements randomly
+                                    for _ in range(3):
+                                        i, j = np.random.randint(0, 4, 2)
+                                        variation[i, j] = np.random.randint(0, 26)
+                                    
+                                    if is_invertible_matrix(variation):
+                                        matrices.append(variation.copy())
+                                
+                                if len(matrices) >= limit:
+                                    return matrices[:limit]
         
         elif size == 5:
             # For 5x5, use even more simplified approach
@@ -380,14 +463,28 @@ class EnhancedHillBreaker:
                                 # Check if matrix is invertible
                                 if is_invertible_matrix(matrix):
                                     matrices.append(matrix.copy())
+                                    
+                                    # Add variations
+                                    for _ in range(10):  # Even more variations for 5x5
+                                        variation = matrix.copy()
+                                        # Modify some elements randomly
+                                        for _ in range(4):
+                                            i, j = np.random.randint(0, 5, 2)
+                                            variation[i, j] = np.random.randint(0, 26)
+                                        
+                                        if is_invertible_matrix(variation):
+                                            matrices.append(variation.copy())
+                                    
+                                    if len(matrices) >= limit:
+                                        return matrices[:limit]
         
         # If we don't have enough matrices, add some random ones
-        while len(matrices) < 100:
+        while len(matrices) < limit:
             matrix = np.random.randint(0, 26, (size, size))
             if is_invertible_matrix(matrix):
                 matrices.append(matrix)
         
-        return matrices
+        return matrices[:limit]
     
     def process_matrices(self, matrices: List[np.ndarray], ciphertext: str) -> List[Tuple[np.ndarray, str, float]]:
         """
@@ -441,7 +538,7 @@ class EnhancedHillBreaker:
     
     def optimized_brute_force(self, ciphertext: str) -> List[Tuple[np.ndarray, str, float]]:
         """
-        Optimized brute force attack.
+        Optimized brute force attack using work queue for better thread utilization.
         
         Args:
             ciphertext: Encrypted text
@@ -452,34 +549,46 @@ class EnhancedHillBreaker:
         results = []
         size = self.matrix_size
         
-        # For larger matrices, we need to be more selective
+        # For larger matrices, generate more matrices to fully utilize threads
         if size >= 4:
-            # Generate a limited set of matrices
-            matrices = self.generate_selective_matrices(1000)  # Increased from 500
+            # Generate more matrices for 4x4 and 5x5
+            matrices = self.generate_selective_matrices(self.num_threads * 100)  # Scale with thread count
         else:
-            # For 3x3, we can try more matrices
-            matrices = self.generate_selective_matrices(5000)  # Increased from 2000
+            # For 3x3, we can try even more matrices
+            matrices = self.generate_selective_matrices(self.num_threads * 500)  # Scale with thread count
         
-        # Process matrices in parallel
+        logging.info(f"Generated {len(matrices)} matrices for size {size}x{size}")
+        
+        # Use a queue-based approach for better thread utilization
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            # Split matrices into chunks
-            chunk_size = max(1, len(matrices) // self.num_threads)
-            chunks = [matrices[i:i+chunk_size] for i in range(0, len(matrices), chunk_size)]
+            # Create smaller chunks for better load balancing
+            optimal_chunk_size = max(10, len(matrices) // (self.num_threads * 10))  # Much smaller chunks
+            chunks = [matrices[i:i+optimal_chunk_size] for i in range(0, len(matrices), optimal_chunk_size)]
             
-            # Process each chunk
-            futures = []
-            for chunk in chunks:
-                future = executor.submit(self.process_matrices, chunk, ciphertext)
-                futures.append(future)
+            logging.info(f"Split into {len(chunks)} chunks of size ~{optimal_chunk_size}")
             
-            # Collect results
-            for future in concurrent.futures.as_completed(futures):
-                chunk_results = future.result()
-                results.extend(chunk_results)
+            # Submit all chunks to the executor
+            future_to_chunk = {executor.submit(self.process_matrices, chunk, ciphertext): i for i, chunk in enumerate(chunks)}
+            
+            # Process results as they complete
+            completed = 0
+            for future in concurrent.futures.as_completed(future_to_chunk):
+                chunk_idx = future_to_chunk[future]
+                try:
+                    chunk_results = future.result()
+                    results.extend(chunk_results)
+                    
+                    # Log progress
+                    completed += 1
+                    if completed % 10 == 0 or completed == len(chunks):
+                        logging.info(f"Processed {completed}/{len(chunks)} chunks ({completed*100/len(chunks):.1f}%)")
+                        
+                except Exception as e:
+                    logging.error(f"Error processing chunk {chunk_idx}: {e}")
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results[:100]  # Return top 100 candidates (increased from 20)
+        return results[:100]  # Return top 100 candidates
     
     def generate_selective_matrices(self, limit: int) -> List[np.ndarray]:
         """
@@ -698,7 +807,7 @@ class EnhancedHillBreaker:
         return processed_text
     def exhaustive_search_2x2(self, ciphertext: str, known_text_path: str = None) -> List[Tuple[np.ndarray, str, float]]:
         """
-        Perform exhaustive search for 2x2 matrices.
+        Perform exhaustive search for 2x2 matrices with improved thread utilization.
         
         Args:
             ciphertext: Encrypted text
@@ -728,26 +837,41 @@ class EnhancedHillBreaker:
         
         logging.info(f"Generated {len(matrices)} invertible 2x2 matrices")
         
-        # Process matrices in parallel
+        # Process matrices in parallel using a work queue approach
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            # Split matrices into chunks
-            chunk_size = max(1, len(matrices) // self.num_threads)
-            chunks = [matrices[i:i+chunk_size] for i in range(0, len(matrices), chunk_size)]
+            # Create smaller chunks for better load balancing
+            optimal_chunk_size = max(100, len(matrices) // (self.num_threads * 10))
+            chunks = [matrices[i:i+optimal_chunk_size] for i in range(0, len(matrices), optimal_chunk_size)]
             
-            # Process each chunk
-            futures = []
-            for i, chunk in enumerate(chunks):
-                future = executor.submit(self.process_2x2_matrices, chunk, ciphertext, known_text_path, i, len(chunks))
-                futures.append(future)
+            logging.info(f"Split into {len(chunks)} chunks of size ~{optimal_chunk_size}")
             
-            # Collect results
-            for future in concurrent.futures.as_completed(futures):
-                chunk_results = future.result()
-                results.extend(chunk_results)
-                
-                # Log progress periodically
-                if len(results) % 1000 == 0:
-                    logging.info(f"Processed {len(results)} results so far")
+            # Submit all chunks to the executor
+            future_to_chunk = {executor.submit(self.process_2x2_matrices, chunk, ciphertext, known_text_path, i, len(chunks)): i 
+                              for i, chunk in enumerate(chunks)}
+            
+            # Process results as they complete and monitor thread utilization
+            completed = 0
+            start_time = time.time()
+            active_threads = self.num_threads
+            
+            for future in concurrent.futures.as_completed(future_to_chunk):
+                chunk_idx = future_to_chunk[future]
+                try:
+                    chunk_results = future.result()
+                    results.extend(chunk_results)
+                    
+                    # Log progress
+                    completed += 1
+                    if completed % 10 == 0 or completed == len(chunks):
+                        elapsed = time.time() - start_time
+                        matrices_per_second = (completed * optimal_chunk_size) / elapsed if elapsed > 0 else 0
+                        logging.info(f"2x2 search: Processed {completed}/{len(chunks)} chunks ({completed*100/len(chunks):.1f}%) - "
+                                    f"~{matrices_per_second:.0f} matrices/sec")
+                        
+                except Exception as e:
+                    logging.error(f"Error processing chunk {chunk_idx}: {e}")
+                    active_threads -= 1
+                    logging.warning(f"Thread utilization: {active_threads}/{self.num_threads} active threads")
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
