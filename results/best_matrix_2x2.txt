@@ -1,0 +1,3 @@
+# Best matrix (found by substring matching)
+[[23 17]
+ [ 0  9]]

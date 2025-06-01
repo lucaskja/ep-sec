@@ -174,9 +174,7 @@ Below are approximate letter frequencies in modern Portuguese (percentages).  Wh
 
 Based on large newspaper corpora, some of the most frequent Portuguese trigrams are:
 
-```
 QUE (~1.8%), ENT (~1.4%), COM (~1.3%), ROS (~1.1%), IST (~1.0%), ADO (~0.9%), ELA (~0.9%), PRA (~0.8%), INH (~0.8%), EST (~0.8%), etc.
-```
 
 > **Tip:** For a 3×3 Hill cipher, use a corpus to compute your own trigram frequencies, or find a published list.
 
@@ -184,15 +182,11 @@ QUE (~1.8%), ENT (~1.4%), COM (~1.3%), ROS (~1.1%), IST (~1.0%), ADO (~0.9%), EL
 
 For block sizes 4 or 5, the absolute frequencies drop, but common Portuguese 4-grams include:
 
-```
 DESE (~0.5%), OSSE (~0.4%), ROTA (~0.4%), ADOU (~0.3%), etc.
-```
 
 Common 5-grams:
 
-```
 PORTE (~0.3%), LIGAR (~0.25%), QUESE (~0.25%), etc.
-```
 
 > **Advice:** The larger $n$, the sparser the frequency data.  For 4×4 or 5×5 Hill, you often combine bigram/trigram knowledge with plaintext guesses (e.g., known salutations, “BOMDIA”, “SAUDA”, “FELIZ”).
 
