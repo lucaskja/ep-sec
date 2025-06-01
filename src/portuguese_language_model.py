@@ -547,33 +547,54 @@ class PortugueseLanguageModel:
         # Clean text
         text = re.sub(r'[^A-Z]', '', text.upper())
         
-        # Find words in text
-        result = ""
-        i = 0
+        # Use dynamic programming to find the best segmentation
+        n = len(text)
         
-        while i < len(text):
-            # Try to find the longest valid word starting at position i
-            found_word = False
-            
-            # Try different word lengths, starting with longer words
-            for length in range(min(15, len(text) - i), 0, -1):
-                word = text[i:i+length]
+        # best_segmentation[i] = best segmentation up to position i
+        best_segmentation = [None] * (n + 1)
+        best_segmentation[0] = []
+        
+        # best_score[i] = score of best segmentation up to position i
+        best_score = [float('-inf')] * (n + 1)
+        best_score[0] = 0
+        
+        for i in range(1, n + 1):
+            for j in range(max(0, i - 15), i):  # Limit max word length to 15
+                word = text[j:i]
                 
-                # Check if it's a valid word in our dictionary
+                # Calculate score for this word
+                word_score = 0
+                
+                # Check if it's a valid word in dictionary
                 if word in self.dictionary:
-                    result += word + " "
-                    i += length
-                    found_word = True
-                    break
-            
-            # If no valid word found, add a single character
-            if not found_word:
-                # Check if it's a valid single letter word (A, E, O)
-                if len(text) > i and text[i] in self.valid_single_letters:
-                    result += text[i] + " "
+                    word_score = len(word) ** 2  # Longer words get higher scores
+                
+                # Check if it's a valid single letter (only A, E, O)
+                elif len(word) == 1 and word in self.valid_single_letters:
+                    word_score = 1  # Valid single letters get a small positive score
+                
+                # All other single letters should be avoided
+                elif len(word) == 1:
+                    word_score = -10  # Strong penalty for invalid single letters
+                
+                # Check if it's a common word
+                elif word in self.common_words:
+                    word_score = len(word) ** 2 + 5  # Bonus for common words
+                
+                # Check for common prefixes/suffixes
+                elif any(word.startswith(prefix) for prefix in self.common_beginnings):
+                    word_score = len(word) * 0.5
+                elif any(word.endswith(suffix) for suffix in self.common_endings):
+                    word_score = len(word) * 0.5
+                
+                # Penalty for unknown words based on length
                 else:
-                    # For other single letters, just add them
-                    result += text[i] + " "
-                i += 1
+                    word_score = -len(word)
+                
+                # Check if this segmentation is better
+                if best_score[j] + word_score > best_score[i]:
+                    best_score[i] = best_score[j] + word_score
+                    best_segmentation[i] = best_segmentation[j] + [word]
         
-        return result.strip()
+        # Return the best segmentation
+        return ' '.join(best_segmentation[n])

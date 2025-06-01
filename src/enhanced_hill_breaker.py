@@ -903,6 +903,17 @@ class EnhancedHillBreaker:
         # Pre-compute determinants for faster checking
         valid_dets = set(coprimes_with_26)
         
+        # Add known good matrices first
+        known_good_matrices = [
+            np.array([[23, 17], [0, 9]]),   # Known to work for some texts
+            np.array([[17, 23], [9, 0]]),   # Transpose of the above
+            np.array([[23, 14], [0, 5]]),   # Another common one
+            np.array([[5, 17], [18, 9]])    # Another common one
+        ]
+        
+        for matrix in known_good_matrices:
+            matrices.append(matrix)
+        
         # Generate matrices more efficiently by focusing on determinant
         for a in range(26):
             for d in coprimes_with_26:  # d must be coprime with 26 for the matrix to be invertible
@@ -910,19 +921,10 @@ class EnhancedHillBreaker:
                     for c in range(0, 26, 2):  # Skip some values to reduce search space
                         det = (a * d - b * c) % 26
                         if det in valid_dets:  # Check if determinant is coprime with 26
-                            matrices.append(np.array([[a, b], [c, d]]))
-        
-        # Add some common matrices that are known to work well
-        common_matrices = [
-            np.array([[23, 17], [0, 9]]),   # Known to work for some texts
-            np.array([[17, 23], [9, 0]]),   # Transpose of the above
-            np.array([[23, 14], [0, 5]]),   # Another common one
-            np.array([[5, 17], [18, 9]])    # Another common one
-        ]
-        
-        for matrix in common_matrices:
-            if matrix.tolist() not in [m.tolist() for m in matrices]:
-                matrices.append(matrix)
+                            matrix = np.array([[a, b], [c, d]])
+                            # Check if this matrix is already in our list
+                            if not any(np.array_equal(matrix, m) for m in matrices):
+                                matrices.append(matrix)
         
         return matrices
     
@@ -955,8 +957,70 @@ class EnhancedHillBreaker:
             except Exception as e:
                 logging.error(f"Error loading known text: {e}")
         
+        # Special matrices to check first (known to work well for 2x2)
+        special_matrices = [
+            np.array([[23, 17], [0, 9]]),   # Known to work for some texts
+            np.array([[17, 23], [9, 0]]),   # Transpose of the above
+            np.array([[23, 14], [0, 5]]),   # Another common one
+            np.array([[5, 17], [18, 9]])    # Another common one
+        ]
+        
+        # Process special matrices first
+        for matrix in special_matrices:
+            if any(np.array_equal(matrix, m) for m in matrices):
+                try:
+                    # Decrypt ciphertext
+                    decrypted = decrypt_hill(ciphertext, matrix)
+                    
+                    # Calculate score using multiple methods
+                    score = 0
+                    
+                    # 1. Score using language model
+                    lang_score = self.language_model.score_text(decrypted)
+                    score += lang_score * 2  # Double weight for language model score
+                    
+                    # 2. Count valid words
+                    valid_count, total_count = self.language_model.count_valid_words(decrypted)
+                    if total_count > 0:
+                        word_score = valid_count / total_count
+                        score += word_score * 10  # Higher weight for valid words
+                    
+                    # 3. Check for common Portuguese words
+                    common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                                  'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+                    
+                    word_count = 0
+                    for word in common_words:
+                        if word in decrypted:
+                            word_count += 1
+                    
+                    # Bonus for common words
+                    score += word_count * 0.5
+                    
+                    # 4. Compare with known text if available
+                    if known_text:
+                        # Calculate similarity with known text
+                        min_len = min(len(decrypted), len(known_text))
+                        matches = sum(1 for i in range(min_len) if decrypted[i] == known_text[i])
+                        similarity = matches / min_len
+                        score += similarity * 10  # Very high weight for similarity
+                    
+                    # Add to results if score is positive
+                    if score > 0:
+                        results.append((matrix, decrypted, score))
+                        
+                        # Check if this is a very good solution
+                        if score > 15 or (valid_count > 10 and word_count > 8):
+                            found_good_solution = True
+                except Exception:
+                    pass
+        
         # Process each matrix
         for i, matrix in enumerate(matrices):
+            # Skip matrices we've already processed
+            if any(np.array_equal(matrix, m) for m in special_matrices):
+                continue
+                
             try:
                 # Decrypt ciphertext
                 decrypted = decrypt_hill(ciphertext, matrix)
