@@ -29,16 +29,21 @@ run_hill_breaker() {
     
     echo "Processing $file_path with key size ${key_size}x${key_size}..."
     
-    # Build command with or without plaintext file
-    local command="$PROJECT_DIR/breakers/hill_breaker.py --ciphertext-file \"$file_path\" --key-size $key_size --method $method --output-dir \"$PROJECT_DIR/results\" --log-file \"$log_file\""
+    # Build command arguments
+    local args=("$PROJECT_DIR/breakers/hill_breaker.py" 
+                "--ciphertext-file" "$file_path" 
+                "--key-size" "$key_size" 
+                "--method" "$method" 
+                "--output-dir" "$PROJECT_DIR/results" 
+                "--log-file" "$log_file")
     
     if [ -n "$plaintext_file" ] && [ -f "$plaintext_file" ]; then
         echo -e "\033[0;36mUsing plaintext file: $plaintext_file\033[0m"
-        command="$command --plaintext-file \"$plaintext_file\""
+        args+=("--plaintext-file" "$plaintext_file")
     fi
     
     # Run the Hill cipher breaker
-    eval "python3 $command"
+    python3 "${args[@]}"
     
     # Check if the decryption was successful
     if [ $? -eq 0 ]; then

@@ -34,16 +34,24 @@ function Run-HillBreaker {
     
     Write-Host "Processing $FilePath with key size ${KeySize}x${KeySize}..."
     
-    # Build command with or without plaintext file
-    $Command = "$ProjectDir\breakers\hill_breaker.py --ciphertext-file $FilePath --key-size $KeySize --method $Method --output-dir $ProjectDir\results --log-file $LogFile"
+    # Build command arguments
+    $Arguments = @(
+        "$ProjectDir\breakers\hill_breaker.py",
+        "--ciphertext-file", "`"$FilePath`"",
+        "--key-size", $KeySize,
+        "--method", $Method,
+        "--output-dir", "`"$ProjectDir\results`"",
+        "--log-file", "`"$LogFile`""
+    )
     
     if ($PlaintextFile -and (Test-Path $PlaintextFile)) {
         Write-Host "Using plaintext file: $PlaintextFile" -ForegroundColor Cyan
-        $Command += " --plaintext-file $PlaintextFile"
+        $Arguments += "--plaintext-file"
+        $Arguments += "`"$PlaintextFile`""
     }
     
     # Run the Hill cipher breaker
-    python $Command
+    & python $Arguments
     
     # Check if the decryption was successful
     if ($LASTEXITCODE -eq 0) {
