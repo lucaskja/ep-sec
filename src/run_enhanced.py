@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--sizes", type=int, nargs="+", default=[2, 3, 4, 5], help="Matrix sizes to process")
     parser.add_argument("--dict-path", default="data/portuguese_dict.txt", help="Path to Portuguese dictionary")
     parser.add_argument("--threads", type=int, default=None, help="Number of threads to use")
+    parser.add_argument("--use-known-text", action="store_true", help="Use known plaintext for attack")
     
     args = parser.parse_args()
     
@@ -37,12 +38,12 @@ def main():
     )
     
     # Process known texts
-    process_texts(args.known_dir, args.sizes, args.dict_path, args.threads, known=True)
+    process_texts(args.known_dir, args.sizes, args.dict_path, args.threads, known=True, use_known_text=args.use_known_text)
     
     # Process unknown texts
-    process_texts(args.unknown_dir, args.sizes, args.dict_path, args.threads, known=False)
+    process_texts(args.unknown_dir, args.sizes, args.dict_path, args.threads, known=False, use_known_text=args.use_known_text)
 
-def process_texts(base_dir: str, sizes: List[int], dict_path: str, num_threads: int, known: bool = False):
+def process_texts(base_dir: str, sizes: List[int], dict_path: str, num_threads: int, known: bool = False, use_known_text: bool = True):
     """
     Process texts in the given directory.
     
@@ -52,6 +53,7 @@ def process_texts(base_dir: str, sizes: List[int], dict_path: str, num_threads: 
         dict_path: Path to Portuguese dictionary
         num_threads: Number of threads to use
         known: Whether these are known texts
+        use_known_text: Whether to use known plaintext for attack
     """
     text_type = "known" if known else "unknown"
     print(f"\n=== Processing {text_type} texts ===")
@@ -66,7 +68,7 @@ def process_texts(base_dir: str, sizes: List[int], dict_path: str, num_threads: 
         
         # Path to original text (for known texts)
         original_text_path = None
-        if known:
+        if known and use_known_text:
             for text_file in os.listdir(os.path.join(base_dir, "textos")):
                 if text_file.endswith(".txt"):
                     original_text_path = os.path.join(base_dir, "textos", text_file)
