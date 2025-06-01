@@ -67,6 +67,15 @@ def break_hill_cipher(ciphertext: str, key_size: int,
     
     logger.info(f"Breaking Hill cipher using {method} method")
     
+    # Load normalized text for validation
+    normalized_text = ""
+    try:
+        with open("data/normalized_text.txt", 'r') as f:
+            normalized_text = f.read()
+        logger.info(f"Loaded normalized text ({len(normalized_text)} characters)")
+    except Exception as e:
+        logger.warning(f"Failed to load normalized text: {e}")
+    
     # Apply the selected method
     if method == 'kpa':
         if not plaintext:
@@ -80,6 +89,25 @@ def break_hill_cipher(ciphertext: str, key_size: int,
             if key is not None:
                 # Decrypt the ciphertext with the recovered key
                 decrypted = kpa.decrypt(ciphertext, key)
+                
+                # Validate against normalized text if available
+                if normalized_text:
+                    is_valid = False
+                    for length in range(15, min(100, len(decrypted)), 5):
+                        for start_pos in range(0, min(200, len(decrypted) - length), 20):
+                            substring = decrypted[start_pos:start_pos+length]
+                            if substring in normalized_text:
+                                logger.info(f"Found matching substring in normalized text: '{substring}'")
+                                is_valid = True
+                                break
+                        if is_valid:
+                            break
+                    
+                    if is_valid:
+                        logger.info("Decryption validated against normalized text")
+                    else:
+                        logger.warning("Decryption could not be validated against normalized text")
+                
                 return key, decrypted
             else:
                 logger.warning("KPA failed to recover key")
@@ -93,6 +121,25 @@ def break_hill_cipher(ciphertext: str, key_size: int,
         language_frequencies = load_language_frequencies()
         ga = HillCipherGA(key_size, language_frequencies)
         key, decrypted = ga.crack(ciphertext, generations, early_stopping)
+        
+        # Validate against normalized text if available
+        if key is not None and normalized_text:
+            is_valid = False
+            for length in range(15, min(100, len(decrypted)), 5):
+                for start_pos in range(0, min(200, len(decrypted) - length), 20):
+                    substring = decrypted[start_pos:start_pos+length]
+                    if substring in normalized_text:
+                        logger.info(f"Found matching substring in normalized text: '{substring}'")
+                        is_valid = True
+                        break
+                if is_valid:
+                    break
+            
+            if is_valid:
+                logger.info("Decryption validated against normalized text")
+            else:
+                logger.warning("Decryption could not be validated against normalized text")
+        
         return key, decrypted
     
     else:
