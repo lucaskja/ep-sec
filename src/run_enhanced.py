@@ -98,7 +98,7 @@ def process_texts(base_dir: str, sizes: List[int], dict_path: str, num_threads: 
             print(f"Error in statistical analyzer: {e}")
         
         # Create breaker
-        breaker = EnhancedHillBreaker(size, dict_path, num_threads)
+        breaker = EnhancedHillBreaker(num_threads=num_threads)
         
         # Break cipher
         results = []
@@ -116,7 +116,7 @@ def process_texts(base_dir: str, sizes: List[int], dict_path: str, num_threads: 
         
         # Then run the regular breaker
         print("Running enhanced breaker...")
-        breaker_results = breaker.break_cipher(ciphertext, original_text_path)
+        breaker_results = breaker.break_hill_cipher(ciphertext, size, original_text_path)
         results.extend(breaker_results)
         
         # Sort results by score
@@ -127,7 +127,24 @@ def process_texts(base_dir: str, sizes: List[int], dict_path: str, num_threads: 
         
         # Generate report
         if results:
-            report = breaker.generate_report(results, ciphertext)
+            report = f"=== Hill Cipher Breaker Report ===\n"
+            report += f"Matrix size: {size}x{size}\n"
+            report += f"Text type: {'Known' if known else 'Unknown'}\n"
+            report += f"Execution time: {elapsed_time:.2f} seconds\n\n"
+            
+            # Add top results
+            report += f"Top {min(5, len(results))} results:\n"
+            for i, (matrix, decrypted, score) in enumerate(results[:5]):
+                report += f"\n--- Result {i+1} (Score: {score:.2f}) ---\n"
+                report += f"Matrix:\n{matrix}\n"
+                report += f"Decrypted text (first 100 chars): {decrypted[:100]}...\n"
+                
+                # Add word analysis
+                words = re.findall(r'[A-Z]{2,}', decrypted)
+                common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                               'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+                found_common = [word for word in words if word in common_words]
+                report += f"Common words found: {', '.join(found_common[:10])}\n"
             print(report)
             print(f"Execution time: {elapsed_time:.2f} seconds")
             
