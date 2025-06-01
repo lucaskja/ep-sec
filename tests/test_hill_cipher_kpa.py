@@ -65,8 +65,21 @@ class TestHillCipherKPA(unittest.TestCase):
     
     def test_matrix_mod_inverse_2x2(self):
         """Test matrix modular inverse for 2x2 matrix."""
-        matrix = np.array([[6, 24], [1, 13]])
-        expected_inverse = np.array([[13, 10], [25, 6]])
+        # Use a matrix with determinant coprime to 26
+        matrix = np.array([[3, 2], [5, 3]])  # det = 9 - 10 = -1 (mod 26) = 25, which is coprime to 26
+        
+        # Calculate expected inverse
+        # For a 2x2 matrix [[a, b], [c, d]], the inverse mod 26 is:
+        # det = (a*d - b*c) mod 26
+        # det_inv = modular inverse of det mod 26
+        # inverse = det_inv * [[d, -b], [-c, a]] mod 26
+        det = (3*3 - 2*5) % 26  # = 9 - 10 = -1 = 25 (mod 26)
+        det_inv = self.kpa_2x2.mod_inverse(det)  # = 25 (since 25*25 = 625 = 1 (mod 26))
+        expected_inverse = (det_inv * np.array([[3, -2], [-5, 3]])) % 26
+        expected_inverse = np.array([[3*25, -2*25], [-5*25, 3*25]]) % 26
+        expected_inverse = np.array([[75, -50], [-125, 75]]) % 26
+        expected_inverse = np.array([[23, 2], [5, 23]]) % 26
+        
         result = self.kpa_2x2.matrix_mod_inverse(matrix)
         np.testing.assert_array_equal(result, expected_inverse)
     

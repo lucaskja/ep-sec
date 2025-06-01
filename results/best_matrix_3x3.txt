@@ -1,4 +1,4 @@
-# Best matrix (Score: 65.00)
-[[13 25 16]
- [ 1 24  3]
- [13 20  8]]
+# Best matrix (found by frequency analysis)
+[[17 10 24]
+ [22 19 15]
+ [ 0  3 16]]

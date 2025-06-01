@@ -1,3 +1,3 @@
-# Best matrix (found by substring matching)
-[[23 17]
- [ 0  9]]
+# Best matrix (found by frequency analysis)
+[[23 14]
+ [ 0  5]]
