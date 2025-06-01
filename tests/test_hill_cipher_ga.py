@@ -62,11 +62,11 @@ class TestHillCipherGA(unittest.TestCase):
     def test_is_invertible(self):
         """Test invertibility check."""
         # Invertible matrix
-        matrix1 = np.array([[6, 24], [1, 13]])
+        matrix1 = np.array([[3, 2], [5, 3]])  # det = 9 - 10 = -1 = 25 (mod 26), which is coprime to 26
         self.assertTrue(self.ga_2x2.is_invertible(matrix1))
         
         # Non-invertible matrix
-        matrix2 = np.array([[2, 4], [1, 2]])
+        matrix2 = np.array([[2, 4], [1, 2]])  # det = 4 - 4 = 0, which is not coprime to 26
         self.assertFalse(self.ga_2x2.is_invertible(matrix2))
     
     def test_generate_random_key(self):
@@ -98,13 +98,16 @@ class TestHillCipherGA(unittest.TestCase):
         # Create plaintext and encrypt it
         plaintext = "HELLOWORLD"
         
+        # Use a key that is definitely invertible mod 26
+        key = np.array([[3, 2], [5, 3]])  # det = 9 - 10 = -1 = 25 (mod 26), which is coprime to 26
+        
         # Encrypt manually
         P = self.ga_2x2.text_to_matrix(plaintext)
-        C = (P @ self.key_2x2) % 26
+        C = (P @ key) % 26
         ciphertext = self.ga_2x2.matrix_to_text(C)
         
         # Decrypt using the key
-        decrypted = self.ga_2x2.decrypt(ciphertext, self.key_2x2)
+        decrypted = self.ga_2x2.decrypt(ciphertext, key)
         
         # Check if decryption is correct
         self.assertEqual(decrypted, plaintext + "X")  # Note: Padded with X
