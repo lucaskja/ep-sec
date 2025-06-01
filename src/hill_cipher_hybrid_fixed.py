@@ -13,6 +13,7 @@ import os
 import time
 import sys
 import argparse
+import logging
 from typing import List, Tuple, Dict, Optional
 
 # Import different breakers
@@ -88,9 +89,34 @@ def process_all_ciphers(known_dir: str = "textos_conhecidos",
             print(f"Using optimized breaker for {size}x{size} matrix...")
             try:
                 # Use optimized breaker directly
-                results_list = optimized_breaker.break_cipher(ciphertext, size, known_text_path=original_text_path)
+                # Create report directory in advance to ensure it exists
+                report_dir = f"relatorios/hibrido/conhecidos/hill_{size}x{size}"
+                os.makedirs(report_dir, exist_ok=True)
+                
+                # Set up logging for this specific matrix size
+                log_file = os.path.join(report_dir, f"hill_{size}x{size}.log")
+                logging.basicConfig(
+                    filename=log_file,
+                    level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s',
+                    force=True
+                )
+                logging.info(f"Starting breaking {size}x{size} cipher")
+                
+                # Run the breaker with reduced memory usage for larger matrices
+                if size >= 4:
+                    # For 4x4 and 5x5, use fewer threads and smaller batches
+                    optimized_breaker.num_threads = min(4, optimized_breaker.num_threads)
+                    results_list = optimized_breaker.break_cipher(ciphertext, size, known_text_path=original_text_path)
+                else:
+                    # For 3x3, use normal settings
+                    results_list = optimized_breaker.break_cipher(ciphertext, size, known_text_path=original_text_path)
+                
+                logging.info(f"Completed breaking {size}x{size} cipher")
             except Exception as e:
-                print(f"Error in advanced techniques: {e}")
+                error_msg = f"Error in advanced techniques: {e}"
+                print(error_msg)
+                logging.error(error_msg)
                 results_list = []
         
         elapsed_time = time.time() - start_time
@@ -149,10 +175,34 @@ def process_all_ciphers(known_dir: str = "textos_conhecidos",
         else:  # For 3x3, 4x4, and 5x5, use optimized breaker
             print(f"Using optimized breaker for {size}x{size} matrix...")
             try:
-                # Use optimized breaker directly
-                results_list = optimized_breaker.break_cipher(ciphertext, size)
+                # Create report directory in advance to ensure it exists
+                report_dir = f"relatorios/hibrido/desconhecidos/hill_{size}x{size}"
+                os.makedirs(report_dir, exist_ok=True)
+                
+                # Set up logging for this specific matrix size
+                log_file = os.path.join(report_dir, f"hill_{size}x{size}.log")
+                logging.basicConfig(
+                    filename=log_file,
+                    level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s',
+                    force=True
+                )
+                logging.info(f"Starting breaking {size}x{size} cipher")
+                
+                # Run the breaker with reduced memory usage for larger matrices
+                if size >= 4:
+                    # For 4x4 and 5x5, use fewer threads and smaller batches
+                    optimized_breaker.num_threads = min(4, optimized_breaker.num_threads)
+                    results_list = optimized_breaker.break_cipher(ciphertext, size)
+                else:
+                    # For 3x3, use normal settings
+                    results_list = optimized_breaker.break_cipher(ciphertext, size)
+                
+                logging.info(f"Completed breaking {size}x{size} cipher")
             except Exception as e:
-                print(f"Error in advanced techniques: {e}")
+                error_msg = f"Error in advanced techniques: {e}"
+                print(error_msg)
+                logging.error(error_msg)
                 results_list = []
         
         elapsed_time = time.time() - start_time

@@ -17,6 +17,11 @@ import itertools
 from collections import Counter
 import time
 import multiprocessing as mp
+import concurrent.futures
+import pickle
+import urllib.request
+import ssl
+import logging
 from typing import List, Dict, Tuple, Optional, Union, Set
 import urllib.request
 import pickle
@@ -598,6 +603,9 @@ class PortugueseDictionary:
         best_score = [float('-inf')] * (n + 1)
         best_score[0] = 0
         
+        # Lista de palavras de uma letra válidas em português
+        valid_single_letters = ["A", "E", "O"]
+        
         for i in range(1, n + 1):
             for j in range(max(0, i - 15), i):  # Limitar o tamanho máximo da palavra para 15
                 word = text[j:i]
@@ -609,6 +617,10 @@ class PortugueseDictionary:
                 if self.contains(word):
                     word_score = len(word) ** 2  # Palavras mais longas têm pontuação maior
                 
+                # Verificar se é uma letra única válida (apenas A, E, O)
+                elif len(word) == 1 and word in valid_single_letters:
+                    word_score = 0.5  # Pontuação baixa mas positiva para letras válidas
+                
                 # Verificar se é um prefixo ou sufixo de palavra válida
                 elif self.is_prefix(word) or self.is_suffix(word):
                     word_score = len(word) * 0.5  # Metade da pontuação para prefixos/sufixos
@@ -619,7 +631,7 @@ class PortugueseDictionary:
                 
                 # Penalizar palavras não reconhecidas
                 elif len(word) == 1:
-                    word_score = 0.1  # Letras isoladas têm pontuação baixa
+                    word_score = -1.0  # Penalizar letras isoladas que não são A, E, O
                 else:
                     word_score = -len(word)  # Penalizar palavras não reconhecidas
                 
@@ -862,8 +874,18 @@ def process_chunk(args):
     # para evitar processamento duplicado
     processed_texts = set()
     
+    # Contador para liberar memória periodicamente
+    counter = 0
+    
     for matrix in chunk:
         try:
+            # Liberar memória a cada 1000 matrizes processadas
+            counter += 1
+            if counter % 1000 == 0:
+                # Forçar coleta de lixo para liberar memória
+                import gc
+                gc.collect()
+            
             decrypted = decrypt_hill(ciphertext, matrix)
             
             # Verificar se já processamos este texto decifrado
@@ -893,6 +915,13 @@ def process_chunk(args):
             results.append((matrix, decrypted, score))
         except ValueError:
             continue
+        except Exception as e:
+            # Capturar outras exceções para evitar falha do processo
+            print(f"Erro ao processar matriz: {e}")
+            continue
+    
+    # Limpar conjunto para liberar memória antes de retornar
+    processed_texts.clear()
     
     return results
 
@@ -919,39 +948,154 @@ def brute_force_hill_parallel(ciphertext: str, matrix_size: int, language_model=
     
     # Determinar número de threads
     if not num_threads:
-        num_threads = min(32, mp.cpu_count() * 2)  # Usar mais threads que CPUs
+        # Limitar o número de threads para evitar uso excessivo de memória
+        num_threads = min(8, mp.cpu_count())
     
-    # Gerar matrizes inversíveis
-    matrices = generate_invertible_matrices(matrix_size)
+    # Configurar logging para o processo
+    log_file = f"hill_breaker_{matrix_size}x{matrix_size}.log"
+    logging.basicConfig(
+        filename=log_file,
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s'
+    )
+    logging.info(f"Iniciando quebra de cifra {matrix_size}x{matrix_size}")
     
-    # Dividir matrizes entre threads
-    chunks = np.array_split(matrices, num_threads)
-    
-    # Preparar argumentos para a função de processamento
-    args = [(chunk, ciphertext, language_model, dictionary, known_text_path) for chunk in chunks]
-    
-    # Processar em paralelo usando ThreadPoolExecutor em vez de ProcessPoolExecutor
-    # para evitar problemas de serialização
-    results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-        # Usar submit e as_completed para melhor controle e feedback
-        future_to_chunk = {executor.submit(process_chunk, arg): i for i, arg in enumerate(args)}
+    try:
+        # Gerar matrizes inversíveis
+        logging.info("Gerando matrizes inversíveis...")
         
-        # Processar resultados à medida que são concluídos
-        for future in concurrent.futures.as_completed(future_to_chunk):
-            chunk_index = future_to_chunk[future]
-            try:
-                chunk_result = future.result()
-                results.extend(chunk_result)
-                # Feedback de progresso
-                print(f"Processado chunk {chunk_index + 1}/{len(chunks)} ({len(chunk_result)} resultados)")
-            except Exception as e:
-                print(f"Erro ao processar chunk {chunk_index}: {e}")
+        # Limitar o número de matrizes para 3x3 para evitar uso excessivo de memória
+        limit = None
+        if matrix_size == 3:
+            limit = 10000  # Limitar a 10.000 matrizes para 3x3
+            
+        matrices = generate_invertible_matrices(matrix_size, limit=limit)
+        logging.info(f"Geradas {len(matrices)} matrizes inversíveis")
+        
+        # Dividir matrizes em chunks menores para processamento em lotes
+        # Usar chunks menores para melhor gerenciamento de memória
+        chunk_size = 500 if matrix_size == 3 else 2000
+        num_chunks = (len(matrices) + chunk_size - 1) // chunk_size
+        chunks = [matrices[i:i+chunk_size] for i in range(0, len(matrices), chunk_size)]
+        logging.info(f"Dividido em {num_chunks} chunks de tamanho {chunk_size}")
+        
+        # Processar em paralelo usando ThreadPoolExecutor
+        results = []
+        best_results = []  # Manter apenas os melhores resultados
+        
+        logging.info(f"Iniciando processamento paralelo com {num_threads} threads")
+        
+        # Processar chunks em lotes para gerenciar memória
+        for batch_idx, batch_chunks in enumerate(chunks_to_batches(chunks, 5)):  # 5 chunks por lote
+            logging.info(f"Processando lote {batch_idx+1}/{(num_chunks+4)//5}")
+            
+            batch_results = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+                # Preparar argumentos para a função de processamento
+                args = [(chunk, ciphertext, language_model, dictionary, known_text_path) for chunk in batch_chunks]
+                
+                # Usar submit e as_completed para melhor controle e feedback
+                future_to_chunk = {executor.submit(process_chunk, arg): i for i, arg in enumerate(args)}
+                
+                # Processar resultados à medida que são concluídos
+                for future in concurrent.futures.as_completed(future_to_chunk):
+                    chunk_index = future_to_chunk[future]
+                    try:
+                        chunk_result = future.result()
+                        batch_results.extend(chunk_result)
+                        # Feedback de progresso
+                        logging.info(f"Processado chunk {chunk_index + 1}/{len(batch_chunks)} ({len(chunk_result)} resultados)")
+                        print(f"Processado chunk {chunk_index + 1}/{len(batch_chunks)} ({len(chunk_result)} resultados)")
+                    except Exception as e:
+                        logging.error(f"Erro ao processar chunk {chunk_index}: {e}")
+                        print(f"Erro ao processar chunk {chunk_index}: {e}")
+            
+            # Ordenar resultados do lote por score
+            batch_results.sort(key=lambda x: x[2], reverse=True)
+            
+            # Manter apenas os 100 melhores resultados de cada lote
+            best_results.extend(batch_results[:100])
+            
+            # Ordenar e limitar os melhores resultados globais
+            best_results.sort(key=lambda x: x[2], reverse=True)
+            best_results = best_results[:200]  # Manter apenas os 200 melhores resultados globais
+            
+            # Salvar checkpoint após cada lote
+            save_checkpoint(best_results, matrix_size)
+            
+            # Liberar memória
+            batch_results.clear()
+            import gc
+            gc.collect()
+        
+        logging.info(f"Processamento concluído. {len(best_results)} resultados encontrados.")
+        return best_results
+        
+    except Exception as e:
+        logging.error(f"Erro durante a quebra da cifra: {e}")
+        # Tentar carregar o último checkpoint em caso de erro
+        checkpoint_results = load_checkpoint(matrix_size)
+        if checkpoint_results:
+            logging.info(f"Carregado checkpoint com {len(checkpoint_results)} resultados")
+            return checkpoint_results
+        raise
+
+def chunks_to_batches(chunks, batch_size):
+    """
+    Divide uma lista de chunks em lotes.
     
-    # Ordenar por score
-    results.sort(key=lambda x: x[2], reverse=True)
+    Args:
+        chunks: Lista de chunks
+        batch_size: Tamanho do lote
+        
+    Returns:
+        Lista de lotes (cada lote é uma lista de chunks)
+    """
+    for i in range(0, len(chunks), batch_size):
+        yield chunks[i:i+batch_size]
+
+def save_checkpoint(results, matrix_size):
+    """
+    Salva um checkpoint dos resultados.
     
-    return results
+    Args:
+        results: Lista de resultados
+        matrix_size: Tamanho da matriz
+    """
+    checkpoint_dir = "checkpoints"
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{matrix_size}x{matrix_size}.pkl")
+    
+    try:
+        with open(checkpoint_path, 'wb') as f:
+            pickle.dump(results, f)
+        logging.info(f"Checkpoint salvo em {checkpoint_path}")
+    except Exception as e:
+        logging.error(f"Erro ao salvar checkpoint: {e}")
+
+def load_checkpoint(matrix_size):
+    """
+    Carrega um checkpoint dos resultados.
+    
+    Args:
+        matrix_size: Tamanho da matriz
+        
+    Returns:
+        Lista de resultados ou None se o checkpoint não existir
+    """
+    checkpoint_path = os.path.join("checkpoints", f"checkpoint_{matrix_size}x{matrix_size}.pkl")
+    
+    if not os.path.exists(checkpoint_path):
+        return None
+    
+    try:
+        with open(checkpoint_path, 'rb') as f:
+            results = pickle.load(f)
+        logging.info(f"Checkpoint carregado de {checkpoint_path}")
+        return results
+    except Exception as e:
+        logging.error(f"Erro ao carregar checkpoint: {e}")
+        return None
     
     # Determinar número de processos
     if not num_processes:
