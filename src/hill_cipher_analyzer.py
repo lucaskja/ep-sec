@@ -91,10 +91,16 @@ class HillCipherAnalyzer:
         elif self.matrix_size == 3:
             # For 3x3, use more advanced techniques
             results.extend(self.analyze_3x3(ciphertext))
+        elif self.matrix_size == 4:
+            # For 4x4, use specialized techniques
+            results.extend(self.analyze_4x4(ciphertext))
+        elif self.matrix_size == 5:
+            # For 5x5, use specialized techniques
+            results.extend(self.analyze_5x5(ciphertext))
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results[:10]  # Return top 10 candidates
+        return results[:1000]  # Return top 1000 candidates
     
     def try_known_matrices(self, ciphertext: str) -> List[Tuple[np.ndarray, str, float]]:
         """
@@ -241,20 +247,298 @@ class HillCipherAnalyzer:
         # For 3x3, we'll use a more targeted approach with common structures
         
         # Try diagonal matrices with common values
-        for a in [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]:  # Coprimes with 26
-            for b in [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]:
-                for c in [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]:
+        coprimes = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]  # Coprimes with 26
+        
+        # Try different combinations of diagonal elements
+        for a in coprimes[:4]:
+            for b in coprimes[:4]:
+                for c in coprimes[:4]:
                     # Create diagonal matrix
                     matrix = np.zeros((3, 3), dtype=int)
                     matrix[0, 0] = a
                     matrix[1, 1] = b
                     matrix[2, 2] = c
                     
-                    # Add some common values for other positions
-                    for i in range(3):
-                        for j in range(3):
-                            if i != j:
-                                matrix[i, j] = (i + j) % 26
+                    # Try different patterns for off-diagonal elements
+                    patterns = [
+                        # Pattern 1: Upper triangular
+                        lambda i, j: (i + j) % 26 if i < j else 0,
+                        # Pattern 2: Lower triangular
+                        lambda i, j: (i + j) % 26 if i > j else 0,
+                        # Pattern 3: Symmetric
+                        lambda i, j: (i + j) % 26 if i != j else matrix[i, i],
+                        # Pattern 4: Circulant
+                        lambda i, j: (i + j + 1) % 26 if i != j else matrix[i, i],
+                        # Pattern 5: Toeplitz
+                        lambda i, j: abs(i - j) % 26 if i != j else matrix[i, i],
+                        # Pattern 6: Small values
+                        lambda i, j: (i * j + 1) % 5 if i != j else matrix[i, i],
+                        # Pattern 7: Common values
+                        lambda i, j: [1, 2, 3, 5, 7, 11][(i+j) % 6] if i != j else matrix[i, i],
+                    ]
+                    
+                    for pattern_func in patterns:
+                        # Apply pattern
+                        for i in range(3):
+                            for j in range(3):
+                                if i != j:  # Keep diagonal elements
+                                    matrix[i, j] = pattern_func(i, j)
+                        
+                        # Check if matrix is invertible
+                        if is_invertible_matrix(matrix):
+                            try:
+                                # Decrypt ciphertext
+                                decrypted = decrypt_hill(ciphertext, matrix)
+                                
+                                # Score the decrypted text
+                                score = score_portuguese_text(decrypted)
+                                
+                                # Add to results if score is positive
+                                if score > 0:
+                                    results.append((matrix.copy(), decrypted, score))
+                            except Exception:
+                                continue
+        
+        # Try some additional common structures
+        common_structures = [
+            # Identity matrix with modifications
+            np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+            # Rotation matrix
+            np.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]]),
+            # Upper triangular
+            np.array([[1, 1, 1], [0, 1, 1], [0, 0, 1]]),
+            # Lower triangular
+            np.array([[1, 0, 0], [1, 1, 0], [1, 1, 1]]),
+            # Symmetric
+            np.array([[1, 2, 3], [2, 5, 6], [3, 6, 9]]),
+        ]
+        
+        for base_matrix in common_structures:
+            # Try different scalings
+            for scale in coprimes:
+                matrix = (base_matrix * scale) % 26
+                
+                # Check if matrix is invertible
+                if is_invertible_matrix(matrix):
+                    try:
+                        # Decrypt ciphertext
+                        decrypted = decrypt_hill(ciphertext, matrix)
+                        
+                        # Score the decrypted text
+                        score = score_portuguese_text(decrypted)
+                        
+                        # Add to results if score is positive
+                        if score > 0:
+                            results.append((matrix.copy(), decrypted, score))
+                    except Exception:
+                        continue
+        
+        # Generate additional random matrices with good properties
+        for _ in range(500):  # Try 500 random matrices
+            # Create random matrix with bias towards invertible matrices
+            matrix = np.zeros((3, 3), dtype=int)
+            
+            # Set diagonal elements to values likely to be coprime with 26
+            for i in range(3):
+                matrix[i, i] = np.random.choice(coprimes)
+            
+            # Set other elements
+            for i in range(3):
+                for j in range(3):
+                    if i != j:
+                        matrix[i, j] = np.random.randint(0, 26)
+            
+            # Check if matrix is invertible
+            if is_invertible_matrix(matrix):
+                try:
+                    # Decrypt ciphertext
+                    decrypted = decrypt_hill(ciphertext, matrix)
+                    
+                    # Score the decrypted text
+                    score = score_portuguese_text(decrypted)
+                    
+                    # Add to results if score is positive
+                    if score > 0:
+                        results.append((matrix.copy(), decrypted, score))
+                except Exception:
+                    continue
+        
+        # Sort by score
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results[:1000]  # Return up to 1000 candidates
+    
+    def analyze_4x4(self, ciphertext: str) -> List[Tuple[np.ndarray, str, float]]:
+        """
+        Analyze ciphertext to discover potential 4x4 Hill cipher keys.
+        
+        Args:
+            ciphertext: Encrypted text
+            
+        Returns:
+            List of tuples (key_matrix, decrypted_text, score)
+        """
+        results = []
+        
+        # For 4x4, we'll use a block structure approach
+        coprimes = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]  # Coprimes with 26
+        
+        # Try block diagonal matrices
+        for a in coprimes[:4]:
+            for b in coprimes[:4]:
+                for c in coprimes[:4]:
+                    for d in coprimes[:4]:
+                        # Create block diagonal matrix
+                        matrix = np.zeros((4, 4), dtype=int)
+                        matrix[0, 0] = a
+                        matrix[1, 1] = b
+                        matrix[2, 2] = c
+                        matrix[3, 3] = d
+                        
+                        # Add some structure
+                        matrix[0, 1] = 1
+                        matrix[1, 2] = 1
+                        matrix[2, 3] = 1
+                        
+                        # Check if matrix is invertible
+                        if is_invertible_matrix(matrix):
+                            try:
+                                # Decrypt ciphertext
+                                decrypted = decrypt_hill(ciphertext, matrix)
+                                
+                                # Score the decrypted text
+                                score = score_portuguese_text(decrypted)
+                                
+                                # Add to results if score is positive
+                                if score > 0:
+                                    results.append((matrix.copy(), decrypted, score))
+                            except Exception:
+                                continue
+        
+        # Try 2x2 block matrices
+        for a in range(1, 26, 5):
+            for b in range(1, 26, 5):
+                for c in range(1, 26, 5):
+                    for d in range(1, 26, 5):
+                        # Create 2x2 block
+                        block = np.array([[a, b], [c, d]])
+                        
+                        if is_invertible_matrix(block):
+                            # Create block diagonal matrix
+                            matrix = np.zeros((4, 4), dtype=int)
+                            matrix[0:2, 0:2] = block
+                            matrix[2:4, 2:4] = block
+                            
+                            # Check if matrix is invertible
+                            if is_invertible_matrix(matrix):
+                                try:
+                                    # Decrypt ciphertext
+                                    decrypted = decrypt_hill(ciphertext, matrix)
+                                    
+                                    # Score the decrypted text
+                                    score = score_portuguese_text(decrypted)
+                                    
+                                    # Add to results if score is positive
+                                    if score > 0:
+                                        results.append((matrix.copy(), decrypted, score))
+                                except Exception:
+                                    continue
+        
+        # Generate additional random matrices with good properties
+        for _ in range(500):  # Try 500 random matrices
+            # Create random matrix with bias towards invertible matrices
+            matrix = np.zeros((4, 4), dtype=int)
+            
+            # Set diagonal elements to values likely to be coprime with 26
+            for i in range(4):
+                matrix[i, i] = np.random.choice(coprimes)
+            
+            # Set other elements
+            for i in range(4):
+                for j in range(4):
+                    if i != j:
+                        matrix[i, j] = np.random.randint(0, 26)
+            
+            # Check if matrix is invertible
+            if is_invertible_matrix(matrix):
+                try:
+                    # Decrypt ciphertext
+                    decrypted = decrypt_hill(ciphertext, matrix)
+                    
+                    # Score the decrypted text
+                    score = score_portuguese_text(decrypted)
+                    
+                    # Add to results if score is positive
+                    if score > 0:
+                        results.append((matrix.copy(), decrypted, score))
+                except Exception:
+                    continue
+        
+        # Sort by score
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results[:1000]  # Return up to 1000 candidates
+    
+    def analyze_5x5(self, ciphertext: str) -> List[Tuple[np.ndarray, str, float]]:
+        """
+        Analyze ciphertext to discover potential 5x5 Hill cipher keys.
+        
+        Args:
+            ciphertext: Encrypted text
+            
+        Returns:
+            List of tuples (key_matrix, decrypted_text, score)
+        """
+        results = []
+        
+        # For 5x5, we'll use a simplified approach
+        coprimes = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]  # Coprimes with 26
+        
+        # Try diagonal matrices with common values
+        for a in coprimes[:3]:
+            for e in coprimes[:3]:
+                # Create diagonal matrix
+                matrix = np.zeros((5, 5), dtype=int)
+                matrix[0, 0] = a
+                matrix[1, 1] = a
+                matrix[2, 2] = a
+                matrix[3, 3] = e
+                matrix[4, 4] = e
+                
+                # Add some structure
+                matrix[0, 1] = 1
+                matrix[1, 2] = 1
+                matrix[2, 3] = 1
+                matrix[3, 4] = 1
+                
+                # Check if matrix is invertible
+                if is_invertible_matrix(matrix):
+                    try:
+                        # Decrypt ciphertext
+                        decrypted = decrypt_hill(ciphertext, matrix)
+                        
+                        # Score the decrypted text
+                        score = score_portuguese_text(decrypted)
+                        
+                        # Add to results if score is positive
+                        if score > 0:
+                            results.append((matrix.copy(), decrypted, score))
+                    except Exception:
+                        continue
+        
+        # Try block diagonal matrices
+        for a in coprimes[:3]:
+            for b in coprimes[:3]:
+                for c in coprimes[:3]:
+                    # Create block diagonal matrix
+                    matrix = np.zeros((5, 5), dtype=int)
+                    matrix[0, 0] = a
+                    matrix[1, 1] = a
+                    matrix[2, 2] = b
+                    matrix[3, 3] = c
+                    matrix[4, 4] = c
+                    
+                    # Add some structure
+                    for i in range(4):
+                        matrix[i, i+1] = 1
                     
                     # Check if matrix is invertible
                     if is_invertible_matrix(matrix):
@@ -267,13 +551,43 @@ class HillCipherAnalyzer:
                             
                             # Add to results if score is positive
                             if score > 0:
-                                results.append((matrix, decrypted, score))
+                                results.append((matrix.copy(), decrypted, score))
                         except Exception:
                             continue
         
+        # Generate additional random matrices with good properties
+        for _ in range(1000):  # Try 1000 random matrices for 5x5
+            # Create random matrix with bias towards invertible matrices
+            matrix = np.zeros((5, 5), dtype=int)
+            
+            # Set diagonal elements to values likely to be coprime with 26
+            for i in range(5):
+                matrix[i, i] = np.random.choice(coprimes)
+            
+            # Set other elements
+            for i in range(5):
+                for j in range(5):
+                    if i != j:
+                        matrix[i, j] = np.random.randint(0, 26)
+            
+            # Check if matrix is invertible
+            if is_invertible_matrix(matrix):
+                try:
+                    # Decrypt ciphertext
+                    decrypted = decrypt_hill(ciphertext, matrix)
+                    
+                    # Score the decrypted text
+                    score = score_portuguese_text(decrypted)
+                    
+                    # Add to results if score is positive
+                    if score > 0:
+                        results.append((matrix.copy(), decrypted, score))
+                except Exception:
+                    continue
+        
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results
+        return results[:1000]  # Return up to 1000 candidates
     
     def analyze_letter_frequencies(self, text: str) -> List[Tuple[str, float]]:
         """
@@ -369,9 +683,10 @@ class HillCipherAnalyzer:
 def main():
     """Main function."""
     parser = argparse.ArgumentParser(description="Hill Cipher Analyzer")
-    parser.add_argument("--size", type=int, default=2, help="Matrix size (2 or 3)")
+    parser.add_argument("--size", type=int, default=2, help="Matrix size (2, 3, 4, or 5)")
     parser.add_argument("--ciphertext", type=str, help="Ciphertext to analyze")
     parser.add_argument("--file", type=str, help="File containing ciphertext")
+    parser.add_argument("--limit", type=int, default=10, help="Maximum number of results to return")
     
     args = parser.parse_args()
     
@@ -395,7 +710,7 @@ def main():
     elapsed_time = time.time() - start_time
     
     # Generate report
-    report = analyzer.generate_report(results, ciphertext)
+    report = analyzer.generate_report(results[:args.limit], ciphertext)
     print(report)
     print(f"Execution time: {elapsed_time:.2f} seconds")
 
