@@ -126,7 +126,8 @@ def count_ngrams(text: str, n: int) -> List[Tuple[str, int]]:
     Returns:
         List of (n-gram, count) tuples, sorted by count in descending order
     """
-    ngrams = [text[i:i+n] for i in range(len(text) - n + 1)]
+    # Make sure we only count n-grams of the exact length
+    ngrams = [text[i:i+n] for i in range(len(text) - n + 1) if len(text[i:i+n]) == n]
     counts = Counter(ngrams)
     return counts.most_common()
 
@@ -149,11 +150,11 @@ def get_top_plaintext_ngrams(n: int, k: int = 10) -> List[str]:
     if n == 1:
         return ['A', 'E', 'O', 'S', 'R', 'I', 'N', 'D', 'M', 'U']
     elif n == 2:
-        return ['DE', 'OS', 'ES', 'RA', 'EN', 'SE', 'ER', 'AN', 'AS', 'OC']
+        return ['DE', 'OS', 'ES', 'RA', 'EN', 'SE', 'ER', 'AN', 'AS', 'OC', 'QU', 'AR', 'TE', 'OR', 'CO']
     elif n == 3:
-        return ['QUE', 'ENT', 'COM', 'ROS', 'IST', 'ADO', 'ELA', 'PRA', 'INH', 'EST']
+        return ['QUE', 'ENT', 'COM', 'ROS', 'IST', 'ADO', 'ELA', 'PRA', 'INH', 'EST', 'NTE', 'TEM', 'ARA', 'POR', 'ERA']
     elif n == 4:
-        return ['DESE', 'OSSE', 'ROTA', 'ADOU', 'MENT', 'ENTE', 'PARA', 'ANDO', 'OQUE', 'ESTA']
+        return ['DESE', 'OSSE', 'ROTA', 'ADOU', 'MENT', 'ENTE', 'PARA', 'ANDO', 'OQUE', 'ESTA', 'INHA', 'OQUE', 'ANDO', 'ENTE']
     elif n == 5:
         return ['PORTE', 'LIGAR', 'QUESE', 'ENTRE', 'CONSE', 'MENTE', 'ESTES', 'ESTES', 'ESTES', 'ESTES']
     else:
@@ -175,11 +176,12 @@ def form_matrices(plaintext_ngrams: List[str], ciphertext_ngrams: List[str], n: 
     matrices = []
     
     # Convert n-grams to numeric vectors
-    plaintext_vectors = [text_to_numbers(ngram) for ngram in plaintext_ngrams]
-    ciphertext_vectors = [text_to_numbers(ngram) for ngram in ciphertext_ngrams]
+    plaintext_vectors = [text_to_numbers(ngram) for ngram in plaintext_ngrams if len(ngram) == n]
+    ciphertext_vectors = [text_to_numbers(ngram) for ngram in ciphertext_ngrams if len(ngram) == n]
     
     # We need at least n distinct n-grams to form an n×n matrix
     if len(plaintext_vectors) < n or len(ciphertext_vectors) < n:
+        print(f"Not enough valid n-grams: {len(plaintext_vectors)} plaintext, {len(ciphertext_vectors)} ciphertext")
         return matrices
     
     # Limit the number of plaintext n-grams to reduce memory usage
