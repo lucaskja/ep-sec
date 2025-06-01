@@ -381,6 +381,32 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
             if score > 50:
                 print(f"Found good key with score {score:.2f}")
                 return key
+    elif matrix_size == 3:
+        known_matrices = [
+            np.array([[6, 24, 1], [13, 16, 10], [20, 17, 15]]),  # Common 3x3 matrix
+            np.array([[2, 4, 12], [9, 1, 6], [7, 5, 3]]),        # Another common matrix
+            np.array([[3, 10, 20], [20, 19, 17], [23, 78, 17]])  # Another common matrix
+        ]
+        
+        for key in known_matrices:
+            try:
+                # Decrypt ciphertext with the key
+                decrypted = decrypt_hill(clean_ciphertext, key)
+                
+                # Score decryption
+                score = score_decryption(decrypted, normalized_text)
+                
+                print(f"Testing known matrix:\n{key}")
+                print(f"Score: {score:.2f}")
+                print(f"Decryption sample: {decrypted[:50]}...")
+                
+                # If the score is high, we found a good key
+                if score > 50:
+                    print(f"Found good key with score {score:.2f}")
+                    return key
+            except Exception as e:
+                print(f"Error testing known matrix: {e}")
+                continue
     
     # Form matrices with a limit on permutations
     max_permutations = 10000  # Adjust this value based on memory constraints
