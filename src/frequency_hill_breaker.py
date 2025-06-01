@@ -442,31 +442,35 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
             if i % 100 == 0 and i > 0:
                 print(f"Tested {i}/{len(keys_to_try)} matrices...")
             
-            # Decrypt ciphertext with the key
-            decrypted = decrypt_hill(clean_ciphertext, key)
-            
-            # Score decryption and check if it's a valid match
-            score, is_valid_match = score_decryption(decrypted, normalized_text)
-            
-            # If this is a valid match and better than what we've found so far
-            if is_valid_match and score > best_score:
-                best_score = score
-                best_key = key
-                found_valid_match = True
-                print(f"Found valid key with score {score:.2f}:")
-                print(f"Key matrix:\n{key}")
-                print(f"Decryption sample: {decrypted[:50]}...")
+            try:
+                # Decrypt ciphertext with the key
+                decrypted = decrypt_hill(clean_ciphertext, key)
                 
-                # If the score is very high, we can stop early
-                if score > 200:
-                    break
-            # If not a valid match but still better than what we have
-            elif not found_valid_match and score > best_score:
-                best_score = score
-                best_key = key
-                print(f"Found potential key with score {score:.2f}:")
-                print(f"Key matrix:\n{key}")
-                print(f"Decryption sample: {decrypted[:50]}...")
+                # Score decryption and check if it's a valid match
+                score, is_valid_match = score_decryption(decrypted, normalized_text)
+                
+                # If this is a valid match and better than what we've found so far
+                if is_valid_match and score > best_score:
+                    best_score = score
+                    best_key = key
+                    found_valid_match = True
+                    print(f"Found valid key with score {score:.2f}:")
+                    print(f"Key matrix:\n{key}")
+                    print(f"Decryption sample: {decrypted[:50]}...")
+                    
+                    # If the score is very high, we can stop early
+                    if score > 200:
+                        break
+                # If not a valid match but still better than what we have
+                elif not found_valid_match and score > best_score:
+                    best_score = score
+                    best_key = key
+                    print(f"Found potential key with score {score:.2f}:")
+                    print(f"Key matrix:\n{key}")
+                    print(f"Decryption sample: {decrypted[:50]}...")
+            except Exception as e:
+                # Skip matrices that cause errors
+                continue
         
         if best_key is not None:
             return best_key
@@ -496,35 +500,49 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
         if key is None:
             continue
         
-        # Decrypt ciphertext with the key
-        decrypted = decrypt_hill(clean_ciphertext, key)
-        
-        # Score decryption and check if it's a valid match
-        score, is_valid_match = score_decryption(decrypted, normalized_text)
-        
-        # If this is a valid match and better than what we've found so far
-        if is_valid_match and score > best_score:
-            best_score = score
-            best_key = key
-            found_valid_match = True
-            print(f"Found valid key with score {score:.2f}:")
-            print(f"Key matrix:\n{key}")
-            print(f"Decryption sample: {decrypted[:50]}...")
+        try:
+            # Decrypt ciphertext with the key
+            decrypted = decrypt_hill(clean_ciphertext, key)
             
-            # If the score is very high, we can stop early
-            if score > 200:
-                break
-        # If not a valid match but still better than what we have
-        elif not found_valid_match and score > best_score:
-            best_score = score
-            best_key = key
-            print(f"Found potential key with score {score:.2f}:")
-            print(f"Key matrix:\n{key}")
-            print(f"Decryption sample: {decrypted[:50]}...")
+            # Score decryption and check if it's a valid match
+            score, is_valid_match = score_decryption(decrypted, normalized_text)
+            
+            # If this is a valid match and better than what we've found so far
+            if is_valid_match and score > best_score:
+                best_score = score
+                best_key = key
+                found_valid_match = True
+                print(f"Found valid key with score {score:.2f}:")
+                print(f"Key matrix:\n{key}")
+                print(f"Decryption sample: {decrypted[:50]}...")
+                
+                # If the score is very high, we can stop early
+                if score > 200:
+                    break
+            # If not a valid match but still better than what we have
+            elif not found_valid_match and score > best_score:
+                best_score = score
+                best_key = key
+                print(f"Found potential key with score {score:.2f}:")
+                print(f"Key matrix:\n{key}")
+                print(f"Decryption sample: {decrypted[:50]}...")
+        except Exception as e:
+            # Skip matrices that cause errors
+            continue
     
-    valid_keys = sum(1 for m in matrices if recover_key(*m) is not None)
-    valid_matches = sum(1 for m in matrices if recover_key(*m) is not None and 
-                       score_decryption(decrypt_hill(clean_ciphertext, recover_key(*m)), normalized_text)[1])
+    valid_keys = 0
+    valid_matches = 0
+    
+    for m in matrices:
+        key = recover_key(*m)
+        if key is not None:
+            valid_keys += 1
+            try:
+                decrypted = decrypt_hill(clean_ciphertext, key)
+                if score_decryption(decrypted, normalized_text)[1]:
+                    valid_matches += 1
+            except:
+                pass
     
     print(f"Found {valid_keys} potential keys for {matrix_size}x{matrix_size} matrix")
     print(f"Found {valid_matches} valid matches in normalized text")
