@@ -1,22 +1,22 @@
 #!/bin/bash
-# Script para executar o quebrador híbrido durante a noite
+# Script to run the hybrid breaker overnight
 
-# Criar diretórios necessários
+# Create necessary directories
 mkdir -p relatorios/hibrido/conhecidos
 mkdir -p relatorios/hibrido/desconhecidos
 
-# Registrar hora de início
-echo "Iniciando processamento em $(date)" > relatorios/hibrido/log.txt
+# Record start time
+echo "Starting processing at $(date)" > relatorios/hibrido/log.txt
 
-# Executar o quebrador híbrido
-echo "Executando quebrador híbrido..."
+# Run the hybrid breaker
+echo "Running hybrid breaker..."
 python3 src/hill_cipher_hybrid_fixed.py
 
-# Registrar hora de término
-echo "Processamento concluído em $(date)" >> relatorios/hibrido/log.txt
+# Record end time
+echo "Processing completed at $(date)" >> relatorios/hibrido/log.txt
 
-# Resumo dos resultados
-echo "Resumo dos resultados:" >> relatorios/hibrido/log.txt
+# Results summary
+echo "Results summary:" >> relatorios/hibrido/log.txt
 cat relatorios/hibrido/resumo.txt >> relatorios/hibrido/log.txt
 
-echo "Processamento concluído. Verifique os resultados em relatorios/hibrido/"
+echo "Processing completed. Check results in relatorios/hibrido/"
