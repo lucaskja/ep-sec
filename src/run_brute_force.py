@@ -73,8 +73,8 @@ def process_texts(base_dir: str, sizes: List[int], known: bool = False):
         
         # Run brute force breaker
         start_time = time.time()
-        breaker = HillCipherBreaker(size)
-        results = breaker.break_cipher(ciphertext)
+        breaker = HillCipherBreaker()
+        results = breaker.break_cipher(ciphertext, size)
         elapsed_time = time.time() - start_time
         
         # Generate report
