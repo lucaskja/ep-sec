@@ -1,21 +1,44 @@
-# Hill Cipher Implementation in Python
+# Hill Cipher Breaking: Theory and Implementation Guide
 
-This document demonstrates two implementations of the Hill Cipher in Python:
-1. Known-plaintext attack
-2. N-gram frequency analysis using genetic algorithms
+## Table of Contents
+1. [Theoretical Background](#theoretical-background)
+2. [Implementation Methods](#implementation-methods)
+3. [Code Examples](#code-examples)
+4. [Performance Optimization](#performance-optimization)
+5. [Success Criteria](#success-criteria)
 
-## Requirements
-```python
-import numpy as np
-from typing import List, Tuple
-import random
-import string
+## Theoretical Background
+
+### Hill Cipher Basics
+The Hill Cipher is a polygraphic substitution cipher developed by Lester S. Hill in 1929, using linear algebra principles. The encryption process is represented as:
+```
+C = PK mod 26
+```
+Where:
+- C is the ciphertext matrix
+- P is the plaintext matrix
+- K is the key matrix (must be invertible)
+- Operations are performed modulo 26 (English alphabet)
+
+## Implementation Methods
+
+### 1. Known-Plaintext Attack
+
+#### Theory
+The known-plaintext attack exploits the Hill Cipher's linear nature through a system of equations:
+```
+P₁K ≡ C₁ (mod 26)
+P₂K ≡ C₂ (mod 26)
+...
+PₙK ≡ Cₙ (mod 26)
 ```
 
-## 1. Known-Plaintext Attack Implementation
+Key recovery formula:
+```
+K ≡ P⁻¹C (mod 26)
+```
 
-### Key Components
-
+#### Implementation
 ```python
 class HillCipher:
     def __init__(self, key_size: int):
@@ -44,38 +67,27 @@ class HillCipher:
         P = self.text_to_matrix(plaintext)
         C = self.text_to_matrix(ciphertext)
         
-        # Ensure we have enough text for key recovery
         if len(plaintext) < self.key_size * self.key_size:
             raise ValueError("Need more plaintext-ciphertext pairs")
             
-        # Solve system of linear equations
         P_inv = np.linalg.inv(P[:self.key_size])
         key = np.dot(P_inv, C[:self.key_size]) % self.modulus
         return key
 ```
 
-### Usage Example
+### 2. N-gram Frequency Analysis with Genetic Algorithms
 
-```python
-# Example usage of known-plaintext attack
-cipher = HillCipher(key_size=2)
+#### Theory
+This method combines statistical analysis with evolutionary computation:
 
-# Original key matrix (usually unknown)
-original_key = np.array([[6, 24], [1, 13]])
+1. **Language Statistics**: Uses characteristic N-gram frequency distributions
+2. **Genetic Components**:
+   - Chromosome: Potential key matrix
+   - Fitness: Comparison with expected N-gram frequencies
+   - Operators: Crossover and mutation
+   - Selection: Tournament and elitism
 
-# Known plaintext-ciphertext pair
-plaintext = "HELLOWORLD"
-ciphertext = cipher.encrypt(plaintext, original_key)
-
-# Recover key
-recovered_key = cipher.recover_key(plaintext, ciphertext)
-print(f"Recovered Key:\n{recovered_key}")
-```
-
-## 2. N-gram Frequency Analysis Using Genetic Algorithm
-
-### Key Components
-
+#### Implementation
 ```python
 class HillCipherGA:
     def __init__(self, key_size: int, language_frequencies: dict):
@@ -84,9 +96,9 @@ class HillCipherGA:
         self.language_frequencies = language_frequencies
         
     def generate_random_key(self) -> np.ndarray:
-        """Generate random key matrix"""
+        """Generate random invertible key matrix"""
         key = np.random.randint(0, self.modulus, (self.key_size, self.key_size))
-        while np.linalg.det(key) == 0:  # Ensure matrix is invertible
+        while np.linalg.det(key) == 0:
             key = np.random.randint(0, self.modulus, (self.key_size, self.key_size))
         return key
     
@@ -94,89 +106,92 @@ class HillCipherGA:
         """Calculate fitness based on n-gram frequency match"""
         cipher = HillCipher(self.key_size)
         try:
-            # Attempt decryption
             decrypted = cipher.decrypt(ciphertext, key)
-            
-            # Calculate n-gram frequencies in decrypted text
             decrypted_freq = self.calculate_ngram_frequencies(decrypted)
-            
-            # Compare with language frequencies
             score = self.compare_frequencies(decrypted_freq, self.language_frequencies)
             return score
         except:
             return float('-inf')
-    
-    def evolve(self, population: List[np.ndarray], ciphertext: str) -> np.ndarray:
-        """Evolve population to find better solutions"""
-        # Sort population by fitness
-        population.sort(key=lambda x: self.calculate_fitness(x, ciphertext), reverse=True)
-        
-        # Keep best solutions
-        new_population = population[:len(population)//2]
-        
-        # Generate new solutions through crossover and mutation
-        while len(new_population) < len(population):
-            parent1, parent2 = random.sample(population[:len(population)//2], 2)
-            child = self.crossover(parent1, parent2)
-            child = self.mutate(child)
-            new_population.append(child)
-            
-        return new_population
-    
-    def crack(self, ciphertext: str, population_size: int, generations: int) -> np.ndarray:
-        """Attempt to crack Hill Cipher using genetic algorithm"""
-        # Initialize population
-        population = [self.generate_random_key() for _ in range(population_size)]
-        
-        # Evolution loop
-        for gen in range(generations):
-            population = self.evolve(population, ciphertext)
-            best_key = population[0]
-            best_fitness = self.calculate_fitness(best_key, ciphertext)
-            
-            if best_fitness > 0.9:  # Threshold for acceptable solution
-                return best_key
-                
-        return population[0]  # Return best found solution
 ```
 
-### Usage Example
+## Mathematical Complexity Analysis
 
+### Known-Plaintext Attack
+- Time Complexity: O(n³)
+- Space Complexity: O(n²)
+
+### Genetic Algorithm
+- Time Complexity: O(GPn³)
+- Space Complexity: O(Pn²)
+Where:
+  - G = generations
+  - P = population size
+  - n = key size
+
+## Performance Optimization
+
+1. **Matrix Operations**
+   - Use NumPy for efficient computations
+   - Implement modular arithmetic carefully
+   - Handle singular matrices
+
+2. **Genetic Algorithm Tuning**
+   - Population size: 4n² to 10n²
+   - Mutation rate: Adaptive, starting at 1/n²
+   - Crossover rate: 0.6-0.8
+   - Generation limit: 100n-1000n
+
+3. **Parallel Processing**
+   ```python
+   # Example of parallel fitness evaluation
+   from multiprocessing import Pool
+   
+   with Pool() as pool:
+       fitness_scores = pool.map(calculate_fitness, population)
+   ```
+
+## Usage Examples
+
+### Known-Plaintext Attack
 ```python
-# Example usage of genetic algorithm approach
-# Define language n-gram frequencies (example for English)
+# Example usage
+cipher = HillCipher(key_size=2)
+original_key = np.array([[6, 24], [1, 13]])
+plaintext = "HELLOWORLD"
+ciphertext = cipher.encrypt(plaintext, original_key)
+recovered_key = cipher.recover_key(plaintext, ciphertext)
+print(f"Recovered Key:\n{recovered_key}")
+```
+
+### Genetic Algorithm
+```python
+# Example usage
 english_frequencies = {
     'TH': 0.0356, 'HE': 0.0307, 'IN': 0.0243,
     'ER': 0.0205, 'AN': 0.0199, 'RE': 0.0185,
-    # ... more n-gram frequencies
 }
 
 cipher_ga = HillCipherGA(key_size=2, language_frequencies=english_frequencies)
-
-# Encrypted text to crack
-ciphertext = "KQEREJEBCPPCJCRKIEACUZBKRVPKRBCIBQCARBJCVCKRXPKRCKVZKEX"
-
-# Attempt to crack
 best_key = cipher_ga.crack(
-    ciphertext=ciphertext,
+    ciphertext="KQEREJEBCPPCJCR",
     population_size=100,
     generations=1000
 )
-
-# Decrypt using found key
-cipher = HillCipher(key_size=2)
-decrypted = cipher.decrypt(ciphertext, best_key)
-print(f"Decrypted text: {decrypted}")
 ```
 
-## Notes
+## Success Criteria
 
-- The known-plaintext attack is deterministic and will always succeed if enough plaintext-ciphertext pairs are available
-- The genetic algorithm approach is probabilistic and may require multiple attempts with different parameters
-- Success of the genetic algorithm depends heavily on:
-  - Quality of language frequency statistics
-  - Population size and number of generations
-  - Length of ciphertext
-  - Key size (larger keys are more difficult to crack)
-  
-Both implementations include error handling and validation to ensure proper usage.
+### Known-Plaintext Attack
+- Exact key recovery
+- Successful decryption verification
+
+### Genetic Algorithm
+- Fitness threshold achievement
+- N-gram frequency match
+- Readable plaintext recovery
+
+## Notes
+- Implementation includes error handling
+- Unit tests recommended for both approaches
+- Security considerations for production use
+- Regular monitoring and logging suggested
