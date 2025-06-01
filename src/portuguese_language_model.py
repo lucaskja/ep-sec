@@ -444,13 +444,19 @@ class PortugueseLanguageModel:
         Returns:
             Tuple of (valid word count, total word count)
         """
-        # Split text into words
-        words = re.findall(r'\b[A-Z]+\b', text.upper())
+        # Clean text
+        text = re.sub(r'[^A-Z]', ' ', text.upper())
+        
+        # Split into words
+        words = [word for word in text.split() if word]
         
         if not words:
             return 0, 0
         
         # Count valid words
-        valid_count = sum(1 for word in words if self.contains(word))
-        
+        valid_count = 0
+        for word in words:
+            if word in self.dictionary or (len(word) == 1 and word in self.valid_single_letters):
+                valid_count += 1
+                
         return valid_count, len(words)

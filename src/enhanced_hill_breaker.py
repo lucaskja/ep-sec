@@ -224,7 +224,11 @@ class EnhancedHillBreaker:
         patterns = [
             "QUEAOSEU", "COMOPARA", "ESTAMOSNOS", "PORQUENAO",
             "TEMOSUMADOS", "MUITOBEMFEITO", "AGORAEVERDADE",
-            "ESTAMOSJUNTOS", "PARAOSNOSSOS", "COMUMACERTA"
+            "ESTAMOSJUNTOS", "PARAOSNOSSOS", "COMUMACERTA",
+            "DEUMAVEZ", "NAOPODIA", "ESTAVAMOS", "QUANDOELE",
+            "APENASUMA", "TODOSOSDIAS", "MUITOBEM", "SEMPREQUEPOSSIVEL",
+            "DEPOISDE", "ANTESDE", "DURANTEO", "ENTRETANTO",
+            "CONTUDO", "POREM", "TODAVIA", "MASELE", "ELESAO"
         ]
         
         # Adjust patterns based on matrix size
@@ -252,7 +256,7 @@ class EnhancedHillBreaker:
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results[:5]  # Return top 5 candidates
+        return results[:50]  # Return top 50 candidates (increased from 5)
     
     def statistical_attack(self, ciphertext: str) -> List[Tuple[np.ndarray, str, float]]:
         """
@@ -288,7 +292,7 @@ class EnhancedHillBreaker:
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results[:20]  # Return top 20 candidates
+        return results[:100]  # Return top 100 candidates (increased from 20)
     
     def generate_statistical_matrices(self) -> List[np.ndarray]:
         """
@@ -401,8 +405,33 @@ class EnhancedHillBreaker:
         for matrix in matrices:
             try:
                 decrypted = decrypt_hill(ciphertext, matrix)
-                score = self.language_model.score_text(decrypted)
                 
+                # Calculate score using multiple methods
+                score = 0
+                
+                # 1. Score using language model
+                lang_score = self.language_model.score_text(decrypted)
+                score += lang_score * 2  # Double weight for language model score
+                
+                # 2. Count valid words
+                valid_count, total_count = self.language_model.count_valid_words(decrypted)
+                if total_count > 0:
+                    word_score = valid_count / total_count
+                    score += word_score * 10  # Higher weight for valid words (increased from 5)
+                
+                # 3. Check for common Portuguese words
+                common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                               'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+                
+                word_count = 0
+                for word in common_words:
+                    if word in decrypted:
+                        word_count += 1
+                
+                # Bonus for common words
+                score += word_count * 0.5  # Increased from 0.2
+                
+                # Add to results if score is positive
                 if score > 0:
                     results.append((matrix, decrypted, score))
             except Exception:
@@ -426,10 +455,10 @@ class EnhancedHillBreaker:
         # For larger matrices, we need to be more selective
         if size >= 4:
             # Generate a limited set of matrices
-            matrices = self.generate_selective_matrices(500)
+            matrices = self.generate_selective_matrices(1000)  # Increased from 500
         else:
             # For 3x3, we can try more matrices
-            matrices = self.generate_selective_matrices(2000)
+            matrices = self.generate_selective_matrices(5000)  # Increased from 2000
         
         # Process matrices in parallel
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
@@ -450,7 +479,7 @@ class EnhancedHillBreaker:
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results[:20]  # Return top 20 candidates
+        return results[:100]  # Return top 100 candidates (increased from 20)
     
     def generate_selective_matrices(self, limit: int) -> List[np.ndarray]:
         """
@@ -571,8 +600,8 @@ class EnhancedHillBreaker:
         # Sort by score
         unique_results.sort(key=lambda x: x[2], reverse=True)
         
-        # Return top 20 results
-        return unique_results[:20]
+        # Return top 100 results (increased from 20)
+        return unique_results[:100]
     
     def generate_report(self, results: List[Tuple[np.ndarray, str, float]], ciphertext: str) -> str:
         """
@@ -616,6 +645,10 @@ class EnhancedHillBreaker:
             valid_percent = valid_count / total_count * 100 if total_count > 0 else 0
             report.append(f"Palavras válidas: {valid_count}/{total_count} ({valid_percent:.2f}%)")
             
+            # Check if this might be the correct solution
+            if valid_percent > 30 or score > 5:
+                report.append("*** POSSÍVEL SOLUÇÃO CORRETA ***")
+            
             report.append("")
         
         return "\n".join(report)
@@ -633,56 +666,36 @@ class EnhancedHillBreaker:
         # Clean text
         text = re.sub(r'[^A-Z]', '', text.upper())
         
-        # Split into words
-        words = []
+        # Try to identify words based on dictionary
+        processed_text = ""
         i = 0
+        
         while i < len(text):
-            # Try different word lengths
-            best_word = None
-            best_score = -float('inf')
-            
-            for length in range(1, min(15, len(text) - i) + 1):
+            # Try to find the longest valid word starting at position i
+            found_word = False
+            for length in range(min(15, len(text) - i), 0, -1):
                 word = text[i:i+length]
                 
-                # Score this word
-                score = 0
-                
-                # Valid word
+                # Check if it's a valid word
                 if self.language_model.contains(word):
-                    score = length ** 2
-                
-                # Common beginning
-                elif any(word.startswith(beginning) for beginning in self.language_model.common_beginnings):
-                    score = length
-                
-                # Common ending
-                elif any(word.endswith(ending) for ending in self.language_model.common_endings):
-                    score = length
-                
-                # Single letter (only A, E, O are valid)
-                elif length == 1 and word in self.language_model.valid_single_letters:
-                    score = 0.5
-                
-                if score > best_score:
-                    best_score = score
-                    best_word = word
+                    processed_text += word + " "
+                    i += length
+                    found_word = True
+                    break
             
-            # If no good word found, use a single character
-            if best_word is None:
-                best_word = text[i]
+            # If no valid word found, add a single character
+            if not found_word:
+                processed_text += text[i]
+                if i < len(text) - 1:
+                    # Add space after single characters except for A, E, O
+                    if text[i] not in self.language_model.valid_single_letters:
+                        processed_text += " "
                 i += 1
-            else:
-                i += len(best_word)
-            
-            words.append(best_word)
         
-        # Join words with spaces
-        processed = " ".join(words)
+        # Add periods to improve readability
+        processed_text = re.sub(r'([A-Z]{3,})\s([A-Z])', r'\1. \2', processed_text)
         
-        # Add periods after some words to improve readability
-        processed = re.sub(r'([A-Z]{3,})\s([A-Z])', r'\1. \2', processed)
-        
-        return processed
+        return processed_text
     def exhaustive_search_2x2(self, ciphertext: str, known_text_path: str = None) -> List[Tuple[np.ndarray, str, float]]:
         """
         Perform exhaustive search for 2x2 matrices.
