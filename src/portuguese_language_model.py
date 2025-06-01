@@ -99,14 +99,105 @@ class PortugueseLanguageModel:
             dict_path: Path to dictionary file
         """
         try:
-            with open(dict_path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    word = line.strip().upper()
-                    if word:
-                        self.dictionary.add(word)
-            print(f"Dictionary loaded with {len(self.dictionary)} words.")
+            # Try different encodings
+            encodings = ['utf-8', 'latin-1', 'iso-8859-1']
+            
+            for encoding in encodings:
+                try:
+                    with open(dict_path, 'r', encoding=encoding) as f:
+                        for line in f:
+                            word = line.strip().upper()
+                            if word:
+                                self.dictionary.add(word)
+                    print(f"Dictionary loaded with {len(self.dictionary)} words using {encoding} encoding.")
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            # If dictionary is empty or not loaded, try to download it
+            if not self.dictionary:
+                print("Dictionary not loaded. Attempting to download...")
+                self.download_dictionary(dict_path)
         except Exception as e:
             print(f"Error loading dictionary: {e}")
+            # Create a minimal dictionary with common Portuguese words
+            self.create_minimal_dictionary()
+    
+    def download_dictionary(self, dict_path: str):
+        """
+        Download Portuguese dictionary from the internet.
+        
+        Args:
+            dict_path: Path to save the dictionary
+        """
+        try:
+            # URLs for Portuguese dictionaries
+            urls = [
+                "https://www.ime.usp.br/~pf/dicios/br-utf8.txt",
+                "https://raw.githubusercontent.com/pythonprobr/palavras/master/palavras.txt"
+            ]
+            
+            for url in urls:
+                try:
+                    # Create SSL context that doesn't verify certificates
+                    context = ssl._create_unverified_context()
+                    
+                    # Download dictionary
+                    with urllib.request.urlopen(url, context=context) as response:
+                        content = response.read().decode('utf-8')
+                        
+                        # Save dictionary
+                        os.makedirs(os.path.dirname(dict_path), exist_ok=True)
+                        with open(dict_path, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                        
+                        # Load dictionary
+                        for line in content.splitlines():
+                            word = line.strip().upper()
+                            if word:
+                                self.dictionary.add(word)
+                        
+                        print(f"Dictionary downloaded and loaded with {len(self.dictionary)} words.")
+                        return
+                except Exception as e:
+                    print(f"Error downloading dictionary from {url}: {e}")
+                    continue
+            
+            # If all downloads fail, create a minimal dictionary
+            self.create_minimal_dictionary()
+        except Exception as e:
+            print(f"Error downloading dictionary: {e}")
+            self.create_minimal_dictionary()
+    
+    def create_minimal_dictionary(self):
+        """Create a minimal dictionary with common Portuguese words."""
+        # Add common Portuguese words
+        common_words = [
+            'DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+            'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS',
+            'COMO', 'MAS', 'AO', 'ELE', 'DAS', 'SEU', 'SUA', 'OU', 'QUANDO',
+            'MUITO', 'NOS', 'JA', 'EU', 'TAMBEM', 'SO', 'PELO', 'PELA', 'ATE',
+            'ISSO', 'ELA', 'ENTRE', 'DEPOIS', 'SEM', 'MESMO', 'AOS', 'SEUS',
+            'QUEM', 'NAS', 'ME', 'ESSE', 'ELES', 'VOCE', 'ESSA', 'NUM', 'NEM',
+            'SUAS', 'MEU', 'MINHA', 'TEM', 'TINHA', 'FORAM', 'SAO', 'ESTAO',
+            'ESTOU', 'ESTA', 'ESTAMOS', 'ESTIVE', 'ESTAVA', 'ESTAVAM', 'TEMOS',
+            'TENHO', 'TINHA', 'TINHAM', 'TIVE', 'TEVE', 'TIVEMOS', 'TIVERAM',
+            'CASA', 'TEMPO', 'VERDADE', 'TRABALHO', 'PARTE', 'PESSOA', 'PESSOAS',
+            'HOMEM', 'MULHER', 'CRIANCA', 'VIDA', 'DIA', 'NOITE', 'AMOR', 'AGUA',
+            'TERRA', 'MAR', 'PAIS', 'CIDADE', 'RUA', 'LUGAR', 'COISA', 'COISAS',
+            'FORMA', 'CASO', 'PONTO', 'GRUPO', 'PROBLEMA', 'FATO', 'JEITO',
+            'LADO', 'MOMENTO', 'HORA', 'SEMANA', 'MES', 'ANO', 'HOJE', 'AMANHA',
+            'ONTEM', 'AGORA', 'DEPOIS', 'ANTES', 'SEMPRE', 'NUNCA', 'AQUI', 'ALI',
+            'DENTRO', 'FORA', 'NOVO', 'VELHO', 'GRANDE', 'PEQUENO', 'ALTO', 'BAIXO',
+            'BOM', 'MAU', 'CERTO', 'ERRADO', 'MELHOR', 'PIOR', 'PRIMEIRO', 'ULTIMO',
+            'MUITOS', 'POUCOS', 'ALGUNS', 'TODAS', 'CADA', 'QUALQUER', 'NADA',
+            'TUDO', 'ALGO', 'ALGUEM', 'NINGUEM', 'OUTRO', 'OUTRA', 'OUTROS', 'OUTRAS'
+        ]
+        
+        for word in common_words:
+            self.dictionary.add(word)
+        
+        print(f"Created minimal dictionary with {len(self.dictionary)} common Portuguese words.")
     
     def build_ngram_models(self):
         """Build n-gram frequency models from common words."""

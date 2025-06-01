@@ -89,6 +89,11 @@ class EnhancedHillBreaker:
         # Clean ciphertext
         ciphertext = re.sub(r'[^A-Z]', '', ciphertext.upper())
         
+        # For 2x2 matrices, use exhaustive search
+        if self.matrix_size == 2:
+            logging.info("Using exhaustive search for 2x2 matrix")
+            return self.exhaustive_search_2x2(ciphertext, known_text_path)
+        
         # Try different approaches in order of effectiveness
         results = []
         
@@ -678,3 +683,137 @@ class EnhancedHillBreaker:
         processed = re.sub(r'([A-Z]{3,})\s([A-Z])', r'\1. \2', processed)
         
         return processed
+    def exhaustive_search_2x2(self, ciphertext: str, known_text_path: str = None) -> List[Tuple[np.ndarray, str, float]]:
+        """
+        Perform exhaustive search for 2x2 matrices.
+        
+        Args:
+            ciphertext: Encrypted text
+            known_text_path: Path to known plaintext file (optional)
+            
+        Returns:
+            List of tuples (key_matrix, decrypted_text, score)
+        """
+        results = []
+        
+        # Generate all possible 2x2 matrices
+        logging.info("Generating all invertible 2x2 matrices")
+        matrices = []
+        
+        # Use coprimes for faster generation of invertible matrices
+        coprimes_with_26 = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]
+        
+        # Generate matrices with determinant coprime with 26
+        for a in range(26):
+            for b in range(26):
+                for c in range(26):
+                    for d in coprimes_with_26:  # At least one element must be coprime with 26
+                        matrix = np.array([[a, b], [c, d]])
+                        det = (a * d - b * c) % 26
+                        if math.gcd(det, 26) == 1:  # Check if determinant is coprime with 26
+                            matrices.append(matrix)
+        
+        logging.info(f"Generated {len(matrices)} invertible 2x2 matrices")
+        
+        # Process matrices in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            # Split matrices into chunks
+            chunk_size = max(1, len(matrices) // self.num_threads)
+            chunks = [matrices[i:i+chunk_size] for i in range(0, len(matrices), chunk_size)]
+            
+            # Process each chunk
+            futures = []
+            for i, chunk in enumerate(chunks):
+                future = executor.submit(self.process_2x2_matrices, chunk, ciphertext, known_text_path, i, len(chunks))
+                futures.append(future)
+            
+            # Collect results
+            for future in concurrent.futures.as_completed(futures):
+                chunk_results = future.result()
+                results.extend(chunk_results)
+                
+                # Log progress periodically
+                if len(results) % 1000 == 0:
+                    logging.info(f"Processed {len(results)} results so far")
+        
+        # Sort by score
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results[:100]  # Return top 100 candidates
+    
+    def process_2x2_matrices(self, matrices: List[np.ndarray], ciphertext: str, 
+                            known_text_path: str = None, chunk_idx: int = 0, 
+                            total_chunks: int = 1) -> List[Tuple[np.ndarray, str, float]]:
+        """
+        Process a list of 2x2 matrices with enhanced scoring.
+        
+        Args:
+            matrices: List of matrices to process
+            ciphertext: Encrypted text
+            known_text_path: Path to known plaintext file (optional)
+            chunk_idx: Index of current chunk (for logging)
+            total_chunks: Total number of chunks (for logging)
+            
+        Returns:
+            List of tuples (key_matrix, decrypted_text, score)
+        """
+        results = []
+        
+        # Load known text for comparison if available
+        known_text = None
+        if known_text_path and os.path.exists(known_text_path):
+            try:
+                with open(known_text_path, 'r', encoding='latin-1') as f:
+                    known_text = f.read().upper()
+                known_text = re.sub(r'[^A-Z]', '', known_text)
+            except Exception as e:
+                logging.error(f"Error loading known text: {e}")
+        
+        # Process each matrix
+        for i, matrix in enumerate(matrices):
+            try:
+                # Log progress periodically
+                if i % 1000 == 0:
+                    logging.debug(f"Chunk {chunk_idx+1}/{total_chunks}: Processed {i}/{len(matrices)} matrices")
+                
+                # Decrypt ciphertext
+                decrypted = decrypt_hill(ciphertext, matrix)
+                
+                # Calculate score using multiple methods
+                score = 0
+                
+                # 1. Score using language model
+                lang_score = self.language_model.score_text(decrypted)
+                score += lang_score * 2  # Double weight for language model score
+                
+                # 2. Count valid words
+                valid_count, total_count = self.language_model.count_valid_words(decrypted)
+                if total_count > 0:
+                    word_score = valid_count / total_count
+                    score += word_score * 5  # High weight for valid words
+                
+                # 3. Check for common Portuguese words
+                common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                               'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+                
+                for word in common_words:
+                    if word in decrypted:
+                        score += 0.2  # Bonus for each common word found
+                
+                # 4. Compare with known text if available
+                if known_text:
+                    # Calculate similarity with known text
+                    min_len = min(len(decrypted), len(known_text))
+                    matches = sum(1 for i in range(min_len) if decrypted[i] == known_text[i])
+                    similarity = matches / min_len
+                    score += similarity * 10  # Very high weight for similarity
+                
+                # Add to results if score is positive
+                if score > 0:
+                    results.append((matrix, decrypted, score))
+            except Exception as e:
+                logging.debug(f"Error processing matrix: {e}")
+                continue
+        
+        # Sort by score
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results[:1000]  # Return top 1000 candidates from this chunk
