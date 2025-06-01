@@ -60,12 +60,27 @@ def load_ngram_frequencies(n: int) -> Dict[str, float]:
     Returns:
         Dictionary mapping n-grams to their frequencies
     """
-    file_path = f"data/{n}gram_frequencies.json"
+    # Handle special case for n=1 (letters)
+    if n == 1:
+        file_path = "data/letter_frequencies.json"
+    else:
+        file_path = f"data/{n}gram_frequencies.json"
+    
     try:
         with open(file_path, 'r') as f:
             return json.load(f)
     except Exception as e:
-        print(f"Error loading n-gram frequencies: {e}")
+        print(f"Error loading n-gram frequencies from {file_path}: {e}")
+        # Fallback to hardcoded frequencies if file not found
+        if n == 1:
+            return {
+                "A": 0.14986, "E": 0.13262, "O": 0.10220, "S": 0.07421, "R": 0.06145,
+                "I": 0.05978, "N": 0.05240, "D": 0.04377, "M": 0.04986, "U": 0.04954,
+                "T": 0.04001, "C": 0.03962, "L": 0.02617, "P": 0.02694, "V": 0.02352,
+                "G": 0.01086, "Q": 0.01630, "H": 0.01234, "F": 0.01005, "B": 0.00933,
+                "Z": 0.00452, "J": 0.00277, "X": 0.00156, "K": 0.00022, "Y": 0.00002,
+                "W": 0.00004
+            }
         return {}
 
 def load_top_ngrams() -> Dict[str, List[List]]:
