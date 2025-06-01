@@ -10,13 +10,16 @@ import sys
 import time
 import argparse
 import logging
-from typing import List
+from typing import List, Tuple
+import numpy as np
 
 # Add the parent directory to the path so Python can find the modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Now import our modules
 from src.enhanced_hill_breaker import EnhancedHillBreaker
+from src.hill_cipher_analyzer import HillCipherAnalyzer
+from src.hill_cipher import decrypt_hill
 
 def main():
     """Main function."""
@@ -81,12 +84,45 @@ def process_texts(base_dir: str, sizes: List[int], dict_path: str, num_threads: 
         
         print(f"\n--- Breaking {size}x{size} cipher ({text_type} text) ---")
         
+        # First, try the statistical analyzer to get potential matrices
+        start_time = time.time()
+        analyzer = HillCipherAnalyzer(size)
+        potential_matrices = []
+        
+        try:
+            # Get potential matrices from analyzer
+            analyzer_results = analyzer.analyze_ciphertext(ciphertext)
+            potential_matrices = [matrix for matrix, _, _ in analyzer_results]
+            print(f"Statistical analyzer found {len(potential_matrices)} potential matrices")
+        except Exception as e:
+            print(f"Error in statistical analyzer: {e}")
+        
         # Create breaker
         breaker = EnhancedHillBreaker(size, dict_path, num_threads)
         
         # Break cipher
-        start_time = time.time()
-        results = breaker.break_cipher(ciphertext, original_text_path)
+        results = []
+        
+        # First, try the potential matrices from the analyzer
+        if potential_matrices:
+            print("Testing matrices from statistical analyzer...")
+            for matrix in potential_matrices:
+                try:
+                    decrypted = decrypt_hill(ciphertext, matrix)
+                    score = breaker.score_text(decrypted)
+                    results.append((matrix, decrypted, score))
+                except Exception as e:
+                    print(f"Error testing matrix: {e}")
+        
+        # Then run the regular breaker
+        print("Running enhanced breaker...")
+        breaker_results = breaker.break_cipher(ciphertext, original_text_path)
+        results.extend(breaker_results)
+        
+        # Sort results by score
+        results.sort(key=lambda x: x[2], reverse=True)
+        results = results[:100]  # Keep top 100
+        
         elapsed_time = time.time() - start_time
         
         # Generate report
