@@ -159,7 +159,7 @@ def get_top_plaintext_ngrams(n: int, k: int = 10) -> List[str]:
     else:
         return []
 
-def form_matrices(plaintext_ngrams: List[str], ciphertext_ngrams: List[str], n: int) -> List[Tuple[np.ndarray, np.ndarray]]:
+def form_matrices(plaintext_ngrams: List[str], ciphertext_ngrams: List[str], n: int, max_permutations: int = 1000) -> List[Tuple[np.ndarray, np.ndarray]]:
     """
     Form plaintext and ciphertext matrices from n-grams.
     
@@ -167,6 +167,7 @@ def form_matrices(plaintext_ngrams: List[str], ciphertext_ngrams: List[str], n: 
         plaintext_ngrams: List of plaintext n-grams
         ciphertext_ngrams: List of ciphertext n-grams
         n: Size of n-grams
+        max_permutations: Maximum number of permutations to try (to limit memory usage)
         
     Returns:
         List of (P_stack, C_stack) tuples
@@ -180,6 +181,18 @@ def form_matrices(plaintext_ngrams: List[str], ciphertext_ngrams: List[str], n: 
     # We need at least n distinct n-grams to form an n×n matrix
     if len(plaintext_vectors) < n or len(ciphertext_vectors) < n:
         return matrices
+    
+    # Limit the number of plaintext n-grams to reduce memory usage
+    max_plaintext = min(len(plaintext_vectors), n + 3)
+    max_ciphertext = min(len(ciphertext_vectors), n + 3)
+    
+    plaintext_vectors = plaintext_vectors[:max_plaintext]
+    ciphertext_vectors = ciphertext_vectors[:max_ciphertext]
+    
+    print(f"Using {len(plaintext_vectors)} plaintext vectors and {len(ciphertext_vectors)} ciphertext vectors")
+    
+    # Count permutations to avoid memory issues
+    perm_count = 0
     
     # Try different permutations of plaintext n-grams
     for p_perm in permutations(plaintext_vectors, n):
@@ -196,6 +209,11 @@ def form_matrices(plaintext_ngrams: List[str], ciphertext_ngrams: List[str], n: 
             C_stack = np.array(c_perm).T
             
             matrices.append((P_stack, C_stack))
+            
+            perm_count += 1
+            if perm_count >= max_permutations:
+                print(f"Reached maximum permutations limit ({max_permutations})")
+                return matrices
     
     return matrices
 
@@ -247,9 +265,23 @@ def score_decryption(decrypted_text: str, normalized_text: str) -> float:
         if count > 0:
             score += count * len(word)
     
-    # Check for substrings in normalized text
-    for length in range(10, min(50, len(decrypted_text))):
-        for i in range(len(decrypted_text) - length + 1):
+    # Check for substrings in normalized text - use a more efficient approach
+    # Instead of checking all possible substrings, check a sample of them
+    max_checks = 100  # Limit the number of substring checks to save memory
+    check_count = 0
+    
+    # Check longer substrings first (more valuable matches)
+    for length in range(min(50, len(decrypted_text) // 2), 9, -5):  # Step by 5 to reduce checks
+        if check_count >= max_checks:
+            break
+            
+        # Take samples at regular intervals
+        step = max(1, len(decrypted_text) // 20)  # Check about 20 positions
+        
+        for i in range(0, len(decrypted_text) - length + 1, step):
+            if check_count >= max_checks:
+                break
+                
             substring = decrypted_text[i:i+length]
             if substring in normalized_text:
                 score += length * 2
@@ -257,12 +289,18 @@ def score_decryption(decrypted_text: str, normalized_text: str) -> float:
                 if length >= 20:
                     score += 100
                 break
+                
+            check_count += 1
     
-    # Check letter frequencies
+    # Check letter frequencies - use a more efficient approach
     letter_freqs = load_ngram_frequencies(1)
     if letter_freqs:
-        letter_counts = Counter(decrypted_text)
-        total_letters = len(decrypted_text)
+        # Only check a sample of letters to save computation
+        sample_size = min(1000, len(decrypted_text))
+        sample_step = max(1, len(decrypted_text) // sample_size)
+        
+        letter_counts = Counter(decrypted_text[::sample_step])
+        total_letters = len(letter_counts)
         
         for letter, count in letter_counts.items():
             observed_freq = count / total_letters
@@ -273,8 +311,8 @@ def score_decryption(decrypted_text: str, normalized_text: str) -> float:
             score += similarity * 10
     
     # Check vowel ratio (Portuguese has ~46% vowels)
-    vowels = sum(1 for c in decrypted_text if c in 'AEIOU')
-    vowel_ratio = vowels / len(decrypted_text) if decrypted_text else 0
+    vowels = sum(1 for c in decrypted_text[:1000] if c in 'AEIOU')  # Only check first 1000 chars
+    vowel_ratio = vowels / min(1000, len(decrypted_text)) if decrypted_text else 0
     if 0.4 <= vowel_ratio <= 0.5:
         score += 50
     elif 0.35 <= vowel_ratio <= 0.55:
@@ -303,17 +341,38 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
     # Get top plaintext n-grams
     plaintext_ngrams = get_top_plaintext_ngrams(matrix_size, k=10)
     
-    print(f"Top {len(ciphertext_ngrams)} ciphertext {matrix_size}-grams: {ciphertext_ngrams[:10]}")
-    print(f"Using Portuguese {matrix_size}-grams: {plaintext_ngrams}")
+    print(f"Top {len(ciphertext_ngrams[:10])} ciphertext {matrix_size}-grams: {ciphertext_ngrams[:10]}")
+    print(f"Using Portuguese {matrix_size}-grams: {plaintext_ngrams[:10]}")
     
-    # Form matrices
-    matrices = form_matrices(plaintext_ngrams, ciphertext_ngrams, matrix_size)
+    # Limit the number of n-grams to reduce memory usage
+    max_ngrams = min(10, len(ciphertext_ngrams))
+    ciphertext_ngrams = ciphertext_ngrams[:max_ngrams]
+    
+    # For larger matrices, further reduce the number of n-grams
+    if matrix_size >= 4:
+        max_ngrams = min(6, len(ciphertext_ngrams))
+        ciphertext_ngrams = ciphertext_ngrams[:max_ngrams]
+        plaintext_ngrams = plaintext_ngrams[:max_ngrams]
+    
+    # Form matrices with a limit on permutations
+    max_permutations = 10000  # Adjust this value based on memory constraints
+    if matrix_size >= 4:
+        max_permutations = 1000  # Reduce for larger matrices
+    if matrix_size >= 5:
+        max_permutations = 100   # Further reduce for 5x5
+    
+    matrices = form_matrices(plaintext_ngrams, ciphertext_ngrams, matrix_size, max_permutations)
     
     # Try each matrix pair
     best_key = None
     best_score = 0
     
-    for P_stack, C_stack in matrices:
+    print(f"Testing {len(matrices)} matrix pairs...")
+    
+    for i, (P_stack, C_stack) in enumerate(matrices):
+        if i % 100 == 0 and i > 0:
+            print(f"Tested {i}/{len(matrices)} matrix pairs...")
+        
         # Recover key
         key = recover_key(P_stack, C_stack)
         if key is None:
@@ -328,9 +387,13 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
         if score > best_score:
             best_score = score
             best_key = key
-            print(f"Found potential key with score {score:.2f}:")
+            print(f"Found better key with score {score:.2f}:")
             print(f"Key matrix:\n{key}")
             print(f"Decryption sample: {decrypted[:50]}...")
+            
+            # If the score is very high, we can stop early
+            if score > 100:
+                break
     
     print(f"Found {len([m for m in matrices if recover_key(*m) is not None])} potential keys for {matrix_size}x{matrix_size} matrix")
     
