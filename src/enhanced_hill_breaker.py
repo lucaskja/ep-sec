@@ -839,7 +839,10 @@ class EnhancedHillBreaker:
             completed = 0
             start_time = time.time()
             
-            while active_futures and not self.found_good_solution:
+            # Process at least 25% of chunks before allowing early stopping
+            min_chunks_to_process = max(len(chunks) // 4, 10)
+            
+            while active_futures:
                 # Wait for the first future to complete
                 done, _ = concurrent.futures.wait(active_futures.keys(), return_when=concurrent.futures.FIRST_COMPLETED)
                 
@@ -850,17 +853,13 @@ class EnhancedHillBreaker:
                         chunk_results, found_good = future.result()
                         results.extend(chunk_results)
                         
-                        # Check if we found a good solution
-                        if found_good:
+                        # Check if we found a good solution and processed enough chunks
+                        if found_good and completed >= min_chunks_to_process:
                             self.found_good_solution = True
-                            logging.info("Found good solution, stopping search")
-                            # Cancel remaining futures
-                            for f in active_futures:
-                                f.cancel()
-                            break
+                            logging.info(f"Found good solution after processing {completed} chunks, continuing to process more...")
                         
                         # Submit new work if available
-                        if chunk_queue and not self.found_good_solution:
+                        if chunk_queue:
                             new_chunk_idx, new_chunk = chunk_queue.pop(0)
                             new_future = executor.submit(self.process_2x2_matrices_optimized, new_chunk, ciphertext, known_text_path, new_chunk_idx, len(chunks))
                             active_futures[new_future] = new_chunk_idx
@@ -872,6 +871,15 @@ class EnhancedHillBreaker:
                             matrices_per_second = (completed * optimal_chunk_size) / elapsed if elapsed > 0 else 0
                             logging.info(f"2x2 search: Processed {completed}/{len(chunks)} chunks ({completed*100/len(chunks):.1f}%) - "
                                         f"~{matrices_per_second:.0f} matrices/sec")
+                            
+                        # If we've processed at least 50% of chunks and found a good solution, start canceling remaining work
+                        if self.found_good_solution and completed >= len(chunks) // 2:
+                            logging.info("Processed enough chunks with good solutions, stopping search")
+                            # Cancel remaining futures
+                            for f in list(active_futures.keys()):
+                                f.cancel()
+                            active_futures.clear()
+                            break
                             
                     except Exception as e:
                         logging.error(f"Error processing chunk {chunk_idx}: {e}")
@@ -991,7 +999,8 @@ class EnhancedHillBreaker:
                     results.append((matrix, decrypted, score))
                     
                     # Check if we found a very good solution (early stopping)
-                    if score > 10 or (valid_count > 0 and word_count > 5):
+                    # Only stop if we have at least 10 results and a very high score
+                    if len(results) >= 10 and (score > 15 or (valid_count > 10 and word_count > 8)):
                         found_good_solution = True
                         break
                     

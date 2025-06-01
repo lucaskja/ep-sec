@@ -82,14 +82,87 @@ class PortugueseLanguageModel:
             'ANDO', 'INDO', 'ENDO', 'ARAM', 'ERAM', 'INHA', 'INHA', 'MENT', 'PARA', 'ENTE'
         ]
         
-        # Load dictionary if provided
+        # Load dictionary
         self.dictionary = set()
-        if dict_path and os.path.exists(dict_path):
-            self.load_dictionary(dict_path)
+        self.load_dictionary_from_multiple_locations(dict_path)
         
         # Build n-gram frequency models
         self.ngram_models = {}
         self.build_ngram_models()
+    
+    def load_dictionary_from_multiple_locations(self, dict_path: str = None):
+        """
+        Try to load dictionary from multiple possible locations.
+        
+        Args:
+            dict_path: Path to dictionary file (optional)
+        """
+        # List of possible dictionary locations to try
+        possible_paths = []
+        
+        # Add the provided path if given
+        if dict_path:
+            possible_paths.append(dict_path)
+        
+        # Add common locations
+        possible_paths.extend([
+            "portuguese_dict.txt",                    # Project root
+            "data/portuguese_dict.txt",               # Data directory
+            "../portuguese_dict.txt",                 # Parent directory
+            os.path.join(os.getcwd(), "portuguese_dict.txt"),  # Current working directory
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "portuguese_dict.txt")  # Project root from module
+        ])
+        
+        # Try each path
+        for path in possible_paths:
+            if os.path.exists(path):
+                print(f"Found dictionary at {path}")
+                if self.load_dictionary_file(path):
+                    return
+        
+        # If no dictionary was loaded, try to download it
+        if not self.dictionary:
+            print("Dictionary not found in any of the expected locations. Attempting to download...")
+            self.download_dictionary("data/portuguese_dict.txt")
+        
+        # If still no dictionary, create a minimal one
+        if not self.dictionary:
+            print("Creating minimal dictionary with common Portuguese words.")
+            self.create_minimal_dictionary()
+    
+    def load_dictionary_file(self, dict_path: str) -> bool:
+        """
+        Load dictionary from file.
+        
+        Args:
+            dict_path: Path to dictionary file
+            
+        Returns:
+            True if dictionary was loaded successfully, False otherwise
+        """
+        try:
+            # Try different encodings
+            encodings = ['utf-8', 'latin-1', 'iso-8859-1']
+            
+            for encoding in encodings:
+                try:
+                    with open(dict_path, 'r', encoding=encoding) as f:
+                        for line in f:
+                            word = line.strip().upper()
+                            if word:
+                                self.dictionary.add(word)
+                    print(f"Dictionary loaded with {len(self.dictionary)} words using {encoding} encoding.")
+                    return True
+                except UnicodeDecodeError:
+                    continue
+            
+            # If we get here, none of the encodings worked
+            print(f"Could not decode dictionary file with any of the attempted encodings.")
+            return False
+            
+        except Exception as e:
+            print(f"Error loading dictionary from {dict_path}: {e}")
+            return False
     
     def load_dictionary(self, dict_path: str):
         """
