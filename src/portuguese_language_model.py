@@ -1,0 +1,361 @@
+#!/usr/bin/env python3
+"""
+Enhanced Portuguese Language Model for Hill Cipher Breaker.
+
+This module provides a more sophisticated Portuguese language model
+to improve the quality of decryption results.
+"""
+
+import re
+import pickle
+import os
+import numpy as np
+from collections import Counter
+from typing import Dict, List, Tuple, Set
+
+class PortugueseLanguageModel:
+    """Portuguese language model with advanced features for text analysis."""
+    
+    def __init__(self, dict_path: str = None):
+        """
+        Initialize the Portuguese language model.
+        
+        Args:
+            dict_path: Path to Portuguese dictionary file (optional)
+        """
+        # Portuguese letter frequencies (more accurate)
+        self.letter_freq = {
+            'A': 14.63, 'E': 12.57, 'O': 10.73, 'S': 7.81, 'R': 6.53, 'I': 6.18, 
+            'N': 5.05, 'D': 4.99, 'M': 4.74, 'U': 4.63, 'T': 4.34, 'C': 3.88,
+            'L': 2.78, 'P': 2.52, 'V': 1.67, 'G': 1.30, 'H': 1.28, 'Q': 1.20,
+            'B': 1.04, 'F': 1.02, 'Z': 0.47, 'J': 0.40, 'X': 0.21, 'K': 0.02,
+            'W': 0.01, 'Y': 0.01
+        }
+        
+        # Common Portuguese word endings
+        self.common_endings = [
+            'AR', 'ER', 'IR', 'OU', 'AM', 'EM', 'AO', 'OS', 'AS', 'ES', 'IS',
+            'ADA', 'ADO', 'ANDO', 'ENDO', 'INDO', 'MENTE', 'IDADE', 'ACAO'
+        ]
+        
+        # Common Portuguese word beginnings
+        self.common_beginnings = [
+            'DE', 'CO', 'PR', 'RE', 'IN', 'ES', 'TR', 'PE', 'DES', 'CON',
+            'PRE', 'COM', 'EX', 'SUB', 'INTER', 'SUPER'
+        ]
+        
+        # Common Portuguese words (most frequent)
+        self.common_words = [
+            'DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+            'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS',
+            'COMO', 'MAS', 'AO', 'ELE', 'DAS', 'SEU', 'SUA', 'OU', 'QUANDO',
+            'MUITO', 'NOS', 'JA', 'EU', 'TAMBEM', 'SO', 'PELO', 'PELA', 'ATE',
+            'ISSO', 'ELA', 'ENTRE', 'DEPOIS', 'SEM', 'MESMO', 'AOS', 'SEUS',
+            'QUEM', 'NAS', 'ME', 'ESSE', 'ELES', 'VOCE', 'ESSA'
+        ]
+        
+        # Valid single-letter words in Portuguese
+        self.valid_single_letters = ['A', 'E', 'O']
+        
+        # Common Portuguese bigrams
+        self.common_bigrams = [
+            'DE', 'RA', 'ES', 'OS', 'AR', 'QU', 'NT', 'EN', 'ER', 'RE',
+            'TE', 'CO', 'OR', 'AS', 'DO', 'AD', 'TA', 'SE', 'ME', 'AN',
+            'ND', 'EM', 'ED', 'PA', 'MA', 'EL', 'AM', 'AL', 'PE', 'RI'
+        ]
+        
+        # Common Portuguese trigrams
+        self.common_trigrams = [
+            'QUE', 'EST', 'COM', 'NTE', 'TEM', 'ARA', 'POR', 'ENT', 'TER', 'CON',
+            'RES', 'ADE', 'ERA', 'ADO', 'STA', 'PAR', 'NTO', 'AND', 'DES', 'ESS',
+            'MEN', 'NDA', 'NHA', 'UMA', 'NOS', 'DOS', 'SER', 'AIS', 'ARA', 'VER'
+        ]
+        
+        # Common Portuguese quadgrams
+        self.common_quadgrams = [
+            'MENT', 'ENTE', 'PARA', 'ANDO', 'AQUE', 'ESTA', 'OQUE', 'COMO', 'ADOS', 'NTES',
+            'ISTA', 'IDAD', 'DESS', 'ANTE', 'ANDO', 'CONT', 'ESSE', 'NTOS', 'PRES', 'NCIA',
+            'ANDO', 'INDO', 'ENDO', 'ARAM', 'ERAM', 'INHA', 'INHA', 'MENT', 'PARA', 'ENTE'
+        ]
+        
+        # Load dictionary if provided
+        self.dictionary = set()
+        if dict_path and os.path.exists(dict_path):
+            self.load_dictionary(dict_path)
+        
+        # Build n-gram frequency models
+        self.ngram_models = {}
+        self.build_ngram_models()
+    
+    def load_dictionary(self, dict_path: str):
+        """
+        Load Portuguese dictionary from file.
+        
+        Args:
+            dict_path: Path to dictionary file
+        """
+        try:
+            with open(dict_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    word = line.strip().upper()
+                    if word:
+                        self.dictionary.add(word)
+            print(f"Dictionary loaded with {len(self.dictionary)} words.")
+        except Exception as e:
+            print(f"Error loading dictionary: {e}")
+    
+    def build_ngram_models(self):
+        """Build n-gram frequency models from common words."""
+        # Use common words to build n-gram models
+        text = ' '.join(self.common_words)
+        
+        # Build models for n=1,2,3,4
+        for n in range(1, 5):
+            self.ngram_models[n] = self.extract_ngrams(text, n)
+    
+    def extract_ngrams(self, text: str, n: int) -> Dict[str, float]:
+        """
+        Extract n-grams and their frequencies from text.
+        
+        Args:
+            text: Text to analyze
+            n: Size of n-grams
+            
+        Returns:
+            Dictionary of n-grams and their frequencies
+        """
+        # Clean text
+        text = re.sub(r'[^A-Z]', '', text.upper())
+        
+        # Extract n-grams
+        ngrams = [text[i:i+n] for i in range(len(text) - n + 1)]
+        
+        # Count occurrences
+        counter = Counter(ngrams)
+        
+        # Calculate frequencies
+        total = sum(counter.values())
+        frequencies = {ngram: count / total for ngram, count in counter.items()}
+        
+        return frequencies
+    
+    def score_text(self, text: str) -> float:
+        """
+        Score text based on Portuguese language features.
+        
+        Args:
+            text: Text to score
+            
+        Returns:
+            Score indicating how likely the text is Portuguese
+        """
+        # Clean text
+        text = re.sub(r'[^A-Z]', '', text.upper())
+        
+        if not text:
+            return -100.0
+        
+        # Initialize score
+        score = 0.0
+        
+        # Score letter frequencies
+        letter_score = self.score_letter_frequencies(text)
+        
+        # Score n-grams
+        ngram_scores = []
+        for n in range(1, 5):
+            if len(text) >= n:
+                ngram_scores.append(self.score_ngrams(text, n))
+        
+        # Score word patterns
+        word_score = self.score_word_patterns(text)
+        
+        # Combine scores with weights
+        score = (
+            0.2 * letter_score +
+            0.5 * sum(ngram_scores) / len(ngram_scores) +
+            0.3 * word_score
+        )
+        
+        return score
+    
+    def score_letter_frequencies(self, text: str) -> float:
+        """
+        Score text based on letter frequencies.
+        
+        Args:
+            text: Text to score
+            
+        Returns:
+            Score based on letter frequencies
+        """
+        # Count letters
+        counter = Counter(text)
+        
+        # Calculate frequencies
+        total = len(text)
+        observed_freq = {letter: count / total * 100 for letter, count in counter.items()}
+        
+        # Calculate difference from expected frequencies
+        diff_sum = 0
+        for letter, expected in self.letter_freq.items():
+            observed = observed_freq.get(letter, 0)
+            diff_sum += abs(observed - expected)
+        
+        # Normalize score (lower difference is better)
+        max_diff = sum(self.letter_freq.values())  # Worst case
+        score = 1.0 - (diff_sum / max_diff)
+        
+        return score
+    
+    def score_ngrams(self, text: str, n: int) -> float:
+        """
+        Score text based on n-gram frequencies.
+        
+        Args:
+            text: Text to score
+            n: Size of n-grams
+            
+        Returns:
+            Score based on n-gram frequencies
+        """
+        # Extract n-grams from text
+        ngrams = [text[i:i+n] for i in range(len(text) - n + 1)]
+        
+        if not ngrams:
+            return 0.0
+        
+        # Get expected n-gram frequencies
+        expected_freq = self.ngram_models.get(n, {})
+        
+        if not expected_freq:
+            # Use common n-grams if model not available
+            if n == 2:
+                common_ngrams = self.common_bigrams
+            elif n == 3:
+                common_ngrams = self.common_trigrams
+            elif n == 4:
+                common_ngrams = self.common_quadgrams
+            else:
+                return 0.0
+            
+            # Count matches
+            matches = sum(1 for ngram in ngrams if ngram in common_ngrams)
+            return matches / len(ngrams)
+        
+        # Count matches with expected frequencies
+        score = 0
+        for ngram in ngrams:
+            score += expected_freq.get(ngram, 0)
+        
+        return score / len(ngrams)
+    
+    def score_word_patterns(self, text: str) -> float:
+        """
+        Score text based on Portuguese word patterns.
+        
+        Args:
+            text: Text to score
+            
+        Returns:
+            Score based on word patterns
+        """
+        # Split text into potential words (3-15 characters)
+        words = []
+        for length in range(3, 16):
+            for i in range(len(text) - length + 1):
+                words.append(text[i:i+length])
+        
+        if not words:
+            return 0.0
+        
+        # Score words
+        total_score = 0
+        
+        for word in words:
+            word_score = 0
+            
+            # Check if word is in dictionary
+            if word in self.dictionary:
+                word_score += 1.0
+            
+            # Check for common beginnings
+            for beginning in self.common_beginnings:
+                if word.startswith(beginning):
+                    word_score += 0.5
+                    break
+            
+            # Check for common endings
+            for ending in self.common_endings:
+                if word.endswith(ending):
+                    word_score += 0.5
+                    break
+            
+            # Check vowel-consonant pattern
+            vowels = sum(1 for c in word if c in 'AEIOU')
+            consonants = len(word) - vowels
+            
+            # Portuguese words typically have a good vowel-consonant balance
+            if 0.3 <= vowels / len(word) <= 0.7:
+                word_score += 0.3
+            
+            total_score += word_score
+        
+        return total_score / len(words)
+    
+    def contains(self, word: str) -> bool:
+        """
+        Check if word is in dictionary.
+        
+        Args:
+            word: Word to check
+            
+        Returns:
+            True if word is in dictionary
+        """
+        return word in self.dictionary or (len(word) == 1 and word in self.valid_single_letters)
+    
+    def is_prefix(self, word: str) -> bool:
+        """
+        Check if word is a prefix of a dictionary word.
+        
+        Args:
+            word: Word to check
+            
+        Returns:
+            True if word is a prefix
+        """
+        return any(beginning.startswith(word) for beginning in self.common_beginnings)
+    
+    def is_suffix(self, word: str) -> bool:
+        """
+        Check if word is a suffix of a dictionary word.
+        
+        Args:
+            word: Word to check
+            
+        Returns:
+            True if word is a suffix
+        """
+        return any(ending.endswith(word) for ending in self.common_endings)
+    
+    def count_valid_words(self, text: str) -> Tuple[int, int]:
+        """
+        Count valid words in text.
+        
+        Args:
+            text: Text to analyze
+            
+        Returns:
+            Tuple of (valid word count, total word count)
+        """
+        # Split text into words
+        words = re.findall(r'\b[A-Z]+\b', text.upper())
+        
+        if not words:
+            return 0, 0
+        
+        # Count valid words
+        valid_count = sum(1 for word in words if self.contains(word))
+        
+        return valid_count, len(words)
