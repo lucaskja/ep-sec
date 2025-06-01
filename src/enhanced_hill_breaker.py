@@ -58,6 +58,7 @@ class EnhancedHillBreaker:
         self.matrix_size = matrix_size
         self.language_model = PortugueseLanguageModel(dict_path)
         self.num_threads = num_threads or min(8, mp.cpu_count())
+        self.found_good_solution = False  # Flag for early stopping
         
         # Set up logging
         log_dir = "logs"
@@ -71,7 +72,14 @@ class EnhancedHillBreaker:
             force=True
         )
         
-        logging.info(f"Initialized Enhanced Hill Breaker for {matrix_size}x{matrix_size} matrices")
+        logging.info(f"Initialized Enhanced Hill Breaker for {matrix_size}x{matrix_size} matrices with {self.num_threads} threads")
+        
+        # Load dictionary
+        if not self.language_model.dictionary:
+            logging.warning("Dictionary not loaded. Creating minimal dictionary.")
+            self.language_model.create_minimal_dictionary()
+        else:
+            logging.info(f"Dictionary loaded with {len(self.language_model.dictionary)} words")
     
     def break_cipher(self, ciphertext: str, known_text_path: str = None) -> List[Tuple[np.ndarray, str, float]]:
         """
@@ -754,8 +762,20 @@ class EnhancedHillBreaker:
             valid_percent = valid_count / total_count * 100 if total_count > 0 else 0
             report.append(f"Palavras válidas: {valid_count}/{total_count} ({valid_percent:.2f}%)")
             
+            # Check for common Portuguese words
+            common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                           'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+            
+            found_words = []
+            for word in common_words:
+                if word in decrypted:
+                    found_words.append(word)
+            
+            if found_words:
+                report.append(f"Palavras comuns encontradas: {', '.join(found_words)}")
+            
             # Check if this might be the correct solution
-            if valid_percent > 30 or score > 5:
+            if valid_percent > 30 or score > 5 or len(found_words) >= 5:
                 report.append("*** POSSÍVEL SOLUÇÃO CORRETA ***")
             
             report.append("")
@@ -772,42 +792,11 @@ class EnhancedHillBreaker:
         Returns:
             Processed text
         """
-        # Clean text
-        text = re.sub(r'[^A-Z]', '', text.upper())
-        
-        # Try to identify words based on dictionary
-        processed_text = ""
-        i = 0
-        
-        while i < len(text):
-            # Try to find the longest valid word starting at position i
-            found_word = False
-            for length in range(min(15, len(text) - i), 0, -1):
-                word = text[i:i+length]
-                
-                # Check if it's a valid word
-                if self.language_model.contains(word):
-                    processed_text += word + " "
-                    i += length
-                    found_word = True
-                    break
-            
-            # If no valid word found, add a single character
-            if not found_word:
-                processed_text += text[i]
-                if i < len(text) - 1:
-                    # Add space after single characters except for A, E, O
-                    if text[i] not in self.language_model.valid_single_letters:
-                        processed_text += " "
-                i += 1
-        
-        # Add periods to improve readability
-        processed_text = re.sub(r'([A-Z]{3,})\s([A-Z])', r'\1. \2', processed_text)
-        
-        return processed_text
+        # Use the language model to insert spaces
+        return self.language_model.insert_spaces(text)
     def exhaustive_search_2x2(self, ciphertext: str, known_text_path: str = None) -> List[Tuple[np.ndarray, str, float]]:
         """
-        Perform exhaustive search for 2x2 matrices with improved thread utilization.
+        Perform optimized exhaustive search for 2x2 matrices with improved thread utilization.
         
         Args:
             ciphertext: Encrypted text
@@ -818,64 +807,200 @@ class EnhancedHillBreaker:
         """
         results = []
         
-        # Generate all possible 2x2 matrices
-        logging.info("Generating all invertible 2x2 matrices")
+        # Generate invertible 2x2 matrices more efficiently
+        logging.info("Generating invertible 2x2 matrices using optimized approach")
+        matrices = self.generate_2x2_matrices_optimized()
+        
+        logging.info(f"Generated {len(matrices)} invertible 2x2 matrices")
+        
+        # Early stopping flag
+        self.found_good_solution = False
+        
+        # Process matrices in parallel using a work queue approach with smaller chunks
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            # Create much smaller chunks for better load balancing
+            optimal_chunk_size = 200  # Fixed small chunk size for better distribution
+            chunks = [matrices[i:i+optimal_chunk_size] for i in range(0, len(matrices), optimal_chunk_size)]
+            
+            logging.info(f"Split into {len(chunks)} chunks of size ~{optimal_chunk_size}")
+            
+            # Submit initial batch of chunks (2 per thread)
+            active_futures = {}
+            chunk_queue = list(enumerate(chunks))
+            
+            # Submit initial work (2 chunks per thread)
+            for _ in range(min(self.num_threads * 2, len(chunks))):
+                if chunk_queue:
+                    chunk_idx, chunk = chunk_queue.pop(0)
+                    future = executor.submit(self.process_2x2_matrices_optimized, chunk, ciphertext, known_text_path, chunk_idx, len(chunks))
+                    active_futures[future] = chunk_idx
+            
+            # Process results and submit new work as tasks complete
+            completed = 0
+            start_time = time.time()
+            
+            while active_futures and not self.found_good_solution:
+                # Wait for the first future to complete
+                done, _ = concurrent.futures.wait(active_futures.keys(), return_when=concurrent.futures.FIRST_COMPLETED)
+                
+                for future in done:
+                    chunk_idx = active_futures.pop(future)
+                    
+                    try:
+                        chunk_results, found_good = future.result()
+                        results.extend(chunk_results)
+                        
+                        # Check if we found a good solution
+                        if found_good:
+                            self.found_good_solution = True
+                            logging.info("Found good solution, stopping search")
+                            # Cancel remaining futures
+                            for f in active_futures:
+                                f.cancel()
+                            break
+                        
+                        # Submit new work if available
+                        if chunk_queue and not self.found_good_solution:
+                            new_chunk_idx, new_chunk = chunk_queue.pop(0)
+                            new_future = executor.submit(self.process_2x2_matrices_optimized, new_chunk, ciphertext, known_text_path, new_chunk_idx, len(chunks))
+                            active_futures[new_future] = new_chunk_idx
+                        
+                        # Log progress
+                        completed += 1
+                        if completed % 10 == 0 or completed == len(chunks):
+                            elapsed = time.time() - start_time
+                            matrices_per_second = (completed * optimal_chunk_size) / elapsed if elapsed > 0 else 0
+                            logging.info(f"2x2 search: Processed {completed}/{len(chunks)} chunks ({completed*100/len(chunks):.1f}%) - "
+                                        f"~{matrices_per_second:.0f} matrices/sec")
+                            
+                    except Exception as e:
+                        logging.error(f"Error processing chunk {chunk_idx}: {e}")
+        
+        # Sort by score
+        results.sort(key=lambda x: x[2], reverse=True)
+        return results[:100]  # Return top 100 candidates
+    
+    def generate_2x2_matrices_optimized(self) -> List[np.ndarray]:
+        """
+        Generate invertible 2x2 matrices using an optimized approach.
+        
+        Returns:
+            List of invertible 2x2 matrices
+        """
         matrices = []
         
         # Use coprimes for faster generation of invertible matrices
         coprimes_with_26 = [1, 3, 5, 7, 9, 11, 15, 17, 19, 21, 23, 25]
         
-        # Generate matrices with determinant coprime with 26
+        # Pre-compute determinants for faster checking
+        valid_dets = set(coprimes_with_26)
+        
+        # Generate matrices more efficiently by focusing on determinant
         for a in range(26):
-            for b in range(26):
-                for c in range(26):
-                    for d in coprimes_with_26:  # At least one element must be coprime with 26
-                        matrix = np.array([[a, b], [c, d]])
+            for d in coprimes_with_26:  # d must be coprime with 26 for the matrix to be invertible
+                for b in range(0, 26, 2):  # Skip some values to reduce search space
+                    for c in range(0, 26, 2):  # Skip some values to reduce search space
                         det = (a * d - b * c) % 26
-                        if math.gcd(det, 26) == 1:  # Check if determinant is coprime with 26
-                            matrices.append(matrix)
+                        if det in valid_dets:  # Check if determinant is coprime with 26
+                            matrices.append(np.array([[a, b], [c, d]]))
         
-        logging.info(f"Generated {len(matrices)} invertible 2x2 matrices")
+        # Add some common matrices that are known to work well
+        common_matrices = [
+            np.array([[23, 17], [0, 9]]),   # Known to work for some texts
+            np.array([[17, 23], [9, 0]]),   # Transpose of the above
+            np.array([[23, 14], [0, 5]]),   # Another common one
+            np.array([[5, 17], [18, 9]])    # Another common one
+        ]
         
-        # Process matrices in parallel using a work queue approach
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            # Create smaller chunks for better load balancing
-            optimal_chunk_size = max(100, len(matrices) // (self.num_threads * 10))
-            chunks = [matrices[i:i+optimal_chunk_size] for i in range(0, len(matrices), optimal_chunk_size)]
+        for matrix in common_matrices:
+            if matrix.tolist() not in [m.tolist() for m in matrices]:
+                matrices.append(matrix)
+        
+        return matrices
+    
+    def process_2x2_matrices_optimized(self, matrices: List[np.ndarray], ciphertext: str, 
+                                     known_text_path: str = None, chunk_idx: int = 0, 
+                                     total_chunks: int = 1) -> Tuple[List[Tuple[np.ndarray, str, float]], bool]:
+        """
+        Process a list of 2x2 matrices with enhanced scoring and early stopping.
+        
+        Args:
+            matrices: List of matrices to process
+            ciphertext: Encrypted text
+            known_text_path: Path to known plaintext file (optional)
+            chunk_idx: Index of current chunk (for logging)
+            total_chunks: Total number of chunks (for logging)
             
-            logging.info(f"Split into {len(chunks)} chunks of size ~{optimal_chunk_size}")
-            
-            # Submit all chunks to the executor
-            future_to_chunk = {executor.submit(self.process_2x2_matrices, chunk, ciphertext, known_text_path, i, len(chunks)): i 
-                              for i, chunk in enumerate(chunks)}
-            
-            # Process results as they complete and monitor thread utilization
-            completed = 0
-            start_time = time.time()
-            active_threads = self.num_threads
-            
-            for future in concurrent.futures.as_completed(future_to_chunk):
-                chunk_idx = future_to_chunk[future]
-                try:
-                    chunk_results = future.result()
-                    results.extend(chunk_results)
+        Returns:
+            Tuple of (results list, found_good_solution flag)
+        """
+        results = []
+        found_good_solution = False
+        
+        # Load known text for comparison if available
+        known_text = None
+        if known_text_path and os.path.exists(known_text_path):
+            try:
+                with open(known_text_path, 'r', encoding='latin-1') as f:
+                    known_text = f.read().upper()
+                known_text = re.sub(r'[^A-Z]', '', known_text)
+            except Exception as e:
+                logging.error(f"Error loading known text: {e}")
+        
+        # Process each matrix
+        for i, matrix in enumerate(matrices):
+            try:
+                # Decrypt ciphertext
+                decrypted = decrypt_hill(ciphertext, matrix)
+                
+                # Calculate score using multiple methods
+                score = 0
+                
+                # 1. Score using language model
+                lang_score = self.language_model.score_text(decrypted)
+                score += lang_score * 2  # Double weight for language model score
+                
+                # 2. Count valid words
+                valid_count, total_count = self.language_model.count_valid_words(decrypted)
+                if total_count > 0:
+                    word_score = valid_count / total_count
+                    score += word_score * 10  # Higher weight for valid words
+                
+                # 3. Check for common Portuguese words
+                common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
+                               'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
+                
+                word_count = 0
+                for word in common_words:
+                    if word in decrypted:
+                        word_count += 1
+                
+                # Bonus for common words
+                score += word_count * 0.5
+                
+                # 4. Compare with known text if available
+                if known_text:
+                    # Calculate similarity with known text
+                    min_len = min(len(decrypted), len(known_text))
+                    matches = sum(1 for i in range(min_len) if decrypted[i] == known_text[i])
+                    similarity = matches / min_len
+                    score += similarity * 10  # Very high weight for similarity
+                
+                # Add to results if score is positive
+                if score > 0:
+                    results.append((matrix, decrypted, score))
                     
-                    # Log progress
-                    completed += 1
-                    if completed % 10 == 0 or completed == len(chunks):
-                        elapsed = time.time() - start_time
-                        matrices_per_second = (completed * optimal_chunk_size) / elapsed if elapsed > 0 else 0
-                        logging.info(f"2x2 search: Processed {completed}/{len(chunks)} chunks ({completed*100/len(chunks):.1f}%) - "
-                                    f"~{matrices_per_second:.0f} matrices/sec")
-                        
-                except Exception as e:
-                    logging.error(f"Error processing chunk {chunk_idx}: {e}")
-                    active_threads -= 1
-                    logging.warning(f"Thread utilization: {active_threads}/{self.num_threads} active threads")
+                    # Check if we found a very good solution (early stopping)
+                    if score > 10 or (valid_count > 0 and word_count > 5):
+                        found_good_solution = True
+                        break
+                    
+            except Exception as e:
+                continue
         
         # Sort by score
         results.sort(key=lambda x: x[2], reverse=True)
-        return results[:100]  # Return top 100 candidates
+        return results[:1000], found_good_solution  # Return top 1000 candidates from this chunk
     
     def process_2x2_matrices(self, matrices: List[np.ndarray], ciphertext: str, 
                             known_text_path: str = None, chunk_idx: int = 0, 

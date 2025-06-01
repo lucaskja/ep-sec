@@ -444,11 +444,11 @@ class PortugueseLanguageModel:
         Returns:
             Tuple of (valid word count, total word count)
         """
-        # Clean text
-        text = re.sub(r'[^A-Z]', ' ', text.upper())
+        # Clean text and insert spaces for better word detection
+        processed_text = self.insert_spaces(text)
         
         # Split into words
-        words = [word for word in text.split() if word]
+        words = [word for word in processed_text.split() if word]
         
         if not words:
             return 0, 0
@@ -460,3 +460,47 @@ class PortugueseLanguageModel:
                 valid_count += 1
                 
         return valid_count, len(words)
+    
+    def insert_spaces(self, text: str) -> str:
+        """
+        Insert spaces into text to separate words.
+        
+        Args:
+            text: Text to process
+            
+        Returns:
+            Text with spaces inserted
+        """
+        # Clean text
+        text = re.sub(r'[^A-Z]', '', text.upper())
+        
+        # Find words in text
+        result = ""
+        i = 0
+        
+        while i < len(text):
+            # Try to find the longest valid word starting at position i
+            found_word = False
+            
+            # Try different word lengths, starting with longer words
+            for length in range(min(15, len(text) - i), 0, -1):
+                word = text[i:i+length]
+                
+                # Check if it's a valid word in our dictionary
+                if word in self.dictionary:
+                    result += word + " "
+                    i += length
+                    found_word = True
+                    break
+            
+            # If no valid word found, add a single character
+            if not found_word:
+                # Check if it's a valid single letter word (A, E, O)
+                if len(text) > i and text[i] in self.valid_single_letters:
+                    result += text[i] + " "
+                else:
+                    # For other single letters, just add them
+                    result += text[i] + " "
+                i += 1
+        
+        return result.strip()
