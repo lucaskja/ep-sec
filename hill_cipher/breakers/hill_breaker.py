@@ -26,10 +26,6 @@ from breakers.kpa import HillCipherKPA
 from breakers.genetic import HillCipherGA, load_language_frequencies
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger('hill_cipher_breaker')
 
 def break_hill_cipher(ciphertext: str, key_size: int, 
@@ -37,7 +33,8 @@ def break_hill_cipher(ciphertext: str, key_size: int,
                       method: str = 'auto',
                       generations: int = 100,
                       early_stopping: int = 20,
-                      verbose: bool = False) -> Tuple[Optional[np.ndarray], Optional[str]]:
+                      verbose: bool = False,
+                      quiet: bool = False) -> Tuple[Optional[np.ndarray], Optional[str]]:
     """
     Break Hill cipher using the specified method.
     
@@ -49,14 +46,11 @@ def break_hill_cipher(ciphertext: str, key_size: int,
         generations: Maximum number of generations for GA
         early_stopping: Stop if no improvement after this many generations
         verbose: Enable verbose output
+        quiet: Reduce output verbosity
         
     Returns:
         Tuple of (recovered key, decrypted text)
     """
-    # Set logging level based on verbosity
-    if verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-    
     # Determine the best method to use
     if method == 'auto':
         if plaintext and len(plaintext) >= key_size * key_size:
@@ -121,6 +115,11 @@ def break_hill_cipher(ciphertext: str, key_size: int,
         # Use genetic algorithm
         language_frequencies = load_language_frequencies()
         ga = HillCipherGA(key_size, language_frequencies)
+        
+        # Set GA to be less verbose if quiet mode is enabled
+        if quiet:
+            ga.verbose = False
+        
         key, decrypted = ga.crack(ciphertext, generations, early_stopping)
         
         # Validate against normalized text if available
@@ -159,9 +158,36 @@ def main():
     parser.add_argument("--generations", type=int, default=100, help="Maximum number of generations for GA")
     parser.add_argument("--early-stopping", type=int, default=20, help="Stop if no improvement after this many generations")
     parser.add_argument("--output-dir", type=str, default="results", help="Directory to save results")
+    parser.add_argument("--log-file", type=str, help="File to save logs")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("--quiet", action="store_true", help="Reduce output verbosity")
     
     args = parser.parse_args()
+    
+    # Configure logging
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    if args.quiet:
+        log_level = logging.WARNING
+    
+    # Set up logging to file if specified
+    if args.log_file:
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            filename=args.log_file,
+            filemode='w'
+        )
+        # Add console handler with a higher log level
+        console = logging.StreamHandler()
+        console.setLevel(logging.WARNING if args.quiet else logging.INFO)
+        console.setFormatter(logging.Formatter('%(levelname)s: %(message)s'))
+        logging.getLogger('').addHandler(console)
+    else:
+        # Just log to console
+        logging.basicConfig(
+            level=log_level,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
     
     # Get ciphertext
     ciphertext = args.ciphertext
@@ -190,7 +216,8 @@ def main():
         method=args.method,
         generations=args.generations,
         early_stopping=args.early_stopping,
-        verbose=args.verbose
+        verbose=args.verbose,
+        quiet=args.quiet
     )
     elapsed_time = time.time() - start_time
     

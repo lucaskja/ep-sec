@@ -64,6 +64,7 @@ class HillCipherGA(HillCipher):
         self.mutation_rate = 0.2
         self.crossover_rate = 0.8
         self.tournament_size = 5
+        self.verbose = True
         
         logger.info(f"Initialized Hill Cipher GA solver with key size {key_size}x{key_size}")
     
@@ -145,8 +146,9 @@ class HillCipherGA(HillCipher):
                 self.best_fitness = fitness
                 self.best_key = key.copy()
                 self.best_decryption = decrypted
-                logger.info(f"New best fitness: {fitness:.2f}")
-                logger.info(f"Decryption sample: {decrypted[:50]}...")
+                if self.verbose:
+                    logger.info(f"New best fitness: {fitness:.2f}")
+                    logger.info(f"Decryption sample: {decrypted[:50]}...")
             
             return fitness
         except Exception as e:
@@ -367,7 +369,8 @@ class HillCipherGA(HillCipher):
             # Log progress
             max_fitness = max(fitnesses)
             avg_fitness = sum(fitnesses) / len(fitnesses)
-            logger.info(f"Generation {generation+1}/{generations}: Max fitness = {max_fitness:.2f}, Avg fitness = {avg_fitness:.2f}")
+            if self.verbose:
+                logger.info(f"Generation {generation+1}/{generations}: Max fitness = {max_fitness:.2f}, Avg fitness = {avg_fitness:.2f}")
             
             # Check for early stopping
             if self.best_fitness > prev_best_fitness:
