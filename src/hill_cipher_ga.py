@@ -210,7 +210,7 @@ class HillCipherGA:
             
             # Convert back to text
             return self.matrix_to_text(P)
-        except ValueError as e:
+        except Exception as e:
             logger.debug(f"Decryption error: {e}")
             return ""
     
@@ -225,7 +225,7 @@ class HillCipherGA:
             True if invertible, False otherwise
         """
         try:
-            det = round(np.linalg.det(matrix)) % self.modulus
+            det = int(round(np.linalg.det(matrix))) % self.modulus
             return math.gcd(det, self.modulus) == 1
         except:
             return False
@@ -413,7 +413,12 @@ class HillCipherGA:
             # Mutate a single element
             i = random.randint(0, self.key_size - 1)
             j = random.randint(0, self.key_size - 1)
-            mutated[i, j] = random.randint(0, self.modulus - 1)
+            # Ensure the new value is different
+            original_value = mutated[i, j]
+            new_value = random.randint(0, self.modulus - 1)
+            while new_value == original_value:
+                new_value = random.randint(0, self.modulus - 1)
+            mutated[i, j] = new_value
         elif mutation_type == 'row':
             # Mutate a row
             i = random.randint(0, self.key_size - 1)
@@ -426,6 +431,9 @@ class HillCipherGA:
             # Swap two elements
             i1, j1 = random.randint(0, self.key_size - 1), random.randint(0, self.key_size - 1)
             i2, j2 = random.randint(0, self.key_size - 1), random.randint(0, self.key_size - 1)
+            # Ensure we're swapping different elements
+            while i1 == i2 and j1 == j2:
+                i2, j2 = random.randint(0, self.key_size - 1), random.randint(0, self.key_size - 1)
             mutated[i1, j1], mutated[i2, j2] = mutated[i2, j2], mutated[i1, j1]
         
         # Ensure the mutated matrix is invertible
