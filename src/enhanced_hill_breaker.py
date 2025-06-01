@@ -56,9 +56,20 @@ class EnhancedHillBreaker:
             num_threads: Number of threads for parallel processing (optional)
         """
         self.matrix_size = matrix_size
-        self.language_model = PortugueseLanguageModel(dict_path)
         self.num_threads = num_threads or min(8, mp.cpu_count())
         self.found_good_solution = False  # Flag for early stopping
+        
+        # Import Portuguese statistics for faster scoring
+        try:
+            from src.portuguese_statistics import score_portuguese_text
+            self.score_text = score_portuguese_text
+            print("Using statistical scoring for Portuguese text")
+        except ImportError:
+            # Fall back to language model if statistics module not found
+            from src.portuguese_language_model import PortugueseLanguageModel
+            self.language_model = PortugueseLanguageModel(dict_path)
+            self.score_text = self.language_model.score_text
+            print("Using language model scoring for Portuguese text")
         
         # Set up logging
         log_dir = "logs"
@@ -73,13 +84,6 @@ class EnhancedHillBreaker:
         )
         
         logging.info(f"Initialized Enhanced Hill Breaker for {matrix_size}x{matrix_size} matrices with {self.num_threads} threads")
-        
-        # Load dictionary
-        if not self.language_model.dictionary:
-            logging.warning("Dictionary not loaded. Creating minimal dictionary.")
-            self.language_model.create_minimal_dictionary()
-        else:
-            logging.info(f"Dictionary loaded with {len(self.language_model.dictionary)} words")
     
     def break_cipher(self, ciphertext: str, known_text_path: str = None) -> List[Tuple[np.ndarray, str, float]]:
         """
@@ -751,16 +755,7 @@ class EnhancedHillBreaker:
                 report.append(str(row))
             
             # Show raw decrypted text
-            report.append(f"Texto decifrado (bruto): {decrypted[:100]}...")
-            
-            # Show processed text with word segmentation
-            processed_text = self.post_process_text(decrypted)
-            report.append(f"Texto decifrado (processado): {processed_text[:100]}...")
-            
-            # Count valid words
-            valid_count, total_count = self.language_model.count_valid_words(decrypted)
-            valid_percent = valid_count / total_count * 100 if total_count > 0 else 0
-            report.append(f"Palavras válidas: {valid_count}/{total_count} ({valid_percent:.2f}%)")
+            report.append(f"Texto decifrado: {decrypted[:100]}...")
             
             # Check for common Portuguese words
             common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
@@ -775,7 +770,7 @@ class EnhancedHillBreaker:
                 report.append(f"Palavras comuns encontradas: {', '.join(found_words)}")
             
             # Check if this might be the correct solution
-            if valid_percent > 30 or score > 5 or len(found_words) >= 5:
+            if score > 15 or len(found_words) >= 5:
                 report.append("*** POSSÍVEL SOLUÇÃO CORRETA ***")
             
             report.append("")
@@ -972,30 +967,11 @@ class EnhancedHillBreaker:
                     # Decrypt ciphertext
                     decrypted = decrypt_hill(ciphertext, matrix)
                     
-                    # Calculate score using multiple methods
-                    score = 0
+                    # Calculate score using statistical approach
+                    score = self.score_text(decrypted)
                     
-                    # 1. Score using language model
-                    lang_score = self.language_model.score_text(decrypted)
-                    score += lang_score * 2  # Double weight for language model score
-                    
-                    # 2. Count valid words
-                    valid_count, total_count = self.language_model.count_valid_words(decrypted)
-                    if total_count > 0:
-                        word_score = valid_count / total_count
-                        score += word_score * 10  # Higher weight for valid words
-                    
-                    # 3. Check for common Portuguese words
-                    common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
-                                  'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
-                    
-                    word_count = 0
-                    for word in common_words:
-                        if word in decrypted:
-                            word_count += 1
-                    
-                    # Bonus for common words
-                    score += word_count * 0.5
+                    # Add bonus for known good matrices
+                    score += 5.0  # Significant bonus for known good matrices
                     
                     # 4. Compare with known text if available
                     if known_text:
@@ -1010,7 +986,7 @@ class EnhancedHillBreaker:
                         results.append((matrix, decrypted, score))
                         
                         # Check if this is a very good solution
-                        if score > 15 or (valid_count > 10 and word_count > 8):
+                        if score > 15:
                             found_good_solution = True
                 except Exception:
                     pass
@@ -1025,30 +1001,8 @@ class EnhancedHillBreaker:
                 # Decrypt ciphertext
                 decrypted = decrypt_hill(ciphertext, matrix)
                 
-                # Calculate score using multiple methods
-                score = 0
-                
-                # 1. Score using language model
-                lang_score = self.language_model.score_text(decrypted)
-                score += lang_score * 2  # Double weight for language model score
-                
-                # 2. Count valid words
-                valid_count, total_count = self.language_model.count_valid_words(decrypted)
-                if total_count > 0:
-                    word_score = valid_count / total_count
-                    score += word_score * 10  # Higher weight for valid words
-                
-                # 3. Check for common Portuguese words
-                common_words = ['DE', 'A', 'O', 'QUE', 'E', 'DO', 'DA', 'EM', 'UM', 'PARA', 'COM',
-                               'NAO', 'UMA', 'OS', 'NO', 'SE', 'NA', 'POR', 'MAIS', 'AS', 'DOS']
-                
-                word_count = 0
-                for word in common_words:
-                    if word in decrypted:
-                        word_count += 1
-                
-                # Bonus for common words
-                score += word_count * 0.5
+                # Calculate score using statistical approach
+                score = self.score_text(decrypted)
                 
                 # 4. Compare with known text if available
                 if known_text:
@@ -1064,7 +1018,7 @@ class EnhancedHillBreaker:
                     
                     # Check if we found a very good solution (early stopping)
                     # Only stop if we have at least 10 results and a very high score
-                    if len(results) >= 10 and (score > 15 or (valid_count > 10 and word_count > 8)):
+                    if len(results) >= 10 and score > 15:
                         found_good_solution = True
                         break
                     
