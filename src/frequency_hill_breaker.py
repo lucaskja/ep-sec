@@ -148,15 +148,19 @@ def get_top_plaintext_ngrams(n: int, k: int = 10) -> List[str]:
     
     # Fallback to hardcoded common n-grams if file not found
     if n == 1:
-        return ['A', 'E', 'O', 'S', 'R', 'I', 'N', 'D', 'M', 'U']
+        return ['A', 'E', 'O', 'S', 'R', 'I', 'N', 'D', 'M', 'U', 'T', 'C', 'L', 'P', 'V']
     elif n == 2:
-        return ['DE', 'OS', 'ES', 'RA', 'EN', 'SE', 'ER', 'AN', 'AS', 'OC', 'QU', 'AR', 'TE', 'OR', 'CO']
+        return ['DE', 'OS', 'ES', 'RA', 'EN', 'SE', 'ER', 'AN', 'AS', 'OC', 'QU', 'AR', 'TE', 'OR', 'CO', 
+                'NT', 'DO', 'RE', 'ND', 'OU', 'ME', 'NO', 'EM', 'AO', 'TO']
     elif n == 3:
-        return ['QUE', 'ENT', 'COM', 'ROS', 'IST', 'ADO', 'ELA', 'PRA', 'INH', 'EST', 'NTE', 'TEM', 'ARA', 'POR', 'ERA']
+        return ['QUE', 'ENT', 'COM', 'ROS', 'IST', 'ADO', 'ELA', 'PRA', 'INH', 'EST', 'NTE', 'TEM', 'ARA', 'POR', 'ERA',
+                'NTO', 'AND', 'MEN', 'RES', 'TRA', 'DES', 'CON', 'TER', 'STA', 'PAR']
     elif n == 4:
-        return ['DESE', 'OSSE', 'ROTA', 'ADOU', 'MENT', 'ENTE', 'PARA', 'ANDO', 'OQUE', 'ESTA', 'INHA', 'OQUE', 'ANDO', 'ENTE']
+        return ['DESE', 'OSSE', 'ROTA', 'ADOU', 'MENT', 'ENTE', 'PARA', 'ANDO', 'OQUE', 'ESTA', 'INHA', 'OQUE', 'ANDO', 'ENTE',
+                'NTOS', 'ADOS', 'ARAM', 'ANDO', 'ENTE', 'INHA', 'OQUE', 'ANDO', 'ENTE', 'INHA', 'OQUE']
     elif n == 5:
-        return ['PORTE', 'LIGAR', 'QUESE', 'ENTRE', 'CONSE', 'MENTE', 'ESTES', 'ESTES', 'ESTES', 'ESTES']
+        return ['PORTE', 'LIGAR', 'QUESE', 'ENTRE', 'CONSE', 'MENTE', 'ESTES', 'ESTES', 'ESTES', 'ESTES',
+                'NESTA', 'ESTES', 'ESTES', 'ESTES', 'ESTES', 'NESTA', 'ESTES', 'ESTES', 'ESTES', 'ESTES']
     else:
         return []
 
@@ -182,11 +186,29 @@ def form_matrices(plaintext_ngrams: List[str], ciphertext_ngrams: List[str], n: 
     # We need at least n distinct n-grams to form an n×n matrix
     if len(plaintext_vectors) < n or len(ciphertext_vectors) < n:
         print(f"Not enough valid n-grams: {len(plaintext_vectors)} plaintext, {len(ciphertext_vectors)} ciphertext")
-        return matrices
+        
+        # For 2x2 matrices, we can try some common Portuguese bigrams
+        if n == 2:
+            print("Using hardcoded Portuguese bigrams for 2x2 matrix")
+            plaintext_vectors = [
+                [0, 18],  # AS
+                [4, 13],  # EN
+                [3, 4],   # DE
+                [17, 0],  # RA
+                [4, 18],  # ES
+                [19, 4],  # TE
+                [15, 18], # PS
+                [0, 14],  # AO
+                [13, 19], # NT
+                [8, 13]   # IN
+            ]
+        
+        if len(plaintext_vectors) < n or len(ciphertext_vectors) < n:
+            return matrices
     
     # Limit the number of plaintext n-grams to reduce memory usage
-    max_plaintext = min(len(plaintext_vectors), n + 3)
-    max_ciphertext = min(len(ciphertext_vectors), n + 3)
+    max_plaintext = min(len(plaintext_vectors), n + 5)
+    max_ciphertext = min(len(ciphertext_vectors), n + 5)
     
     plaintext_vectors = plaintext_vectors[:max_plaintext]
     ciphertext_vectors = ciphertext_vectors[:max_ciphertext]
