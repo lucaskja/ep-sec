@@ -380,20 +380,85 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
     ciphertext_ngrams = [ngram for ngram, _ in count_ngrams(clean_ciphertext, matrix_size)]
     
     # Get top plaintext n-grams
-    plaintext_ngrams = get_top_plaintext_ngrams(matrix_size, k=15)
+    plaintext_ngrams = get_top_plaintext_ngrams(matrix_size, k=25)
     
     print(f"Top {len(ciphertext_ngrams[:10])} ciphertext {matrix_size}-grams: {ciphertext_ngrams[:10]}")
     print(f"Using Portuguese {matrix_size}-grams: {plaintext_ngrams[:10]}")
     
     # Limit the number of n-grams to reduce memory usage
-    max_ngrams = min(15, len(ciphertext_ngrams))
+    max_ngrams = min(25, len(ciphertext_ngrams))
     ciphertext_ngrams = ciphertext_ngrams[:max_ngrams]
     
     # For larger matrices, further reduce the number of n-grams
     if matrix_size >= 4:
-        max_ngrams = min(8, len(ciphertext_ngrams))
+        max_ngrams = min(15, len(ciphertext_ngrams))
         ciphertext_ngrams = ciphertext_ngrams[:max_ngrams]
         plaintext_ngrams = plaintext_ngrams[:max_ngrams]
+    
+    # For 2x2 matrices, try a systematic approach based on frequency_analyzer.md
+    if matrix_size == 2:
+        print("Using systematic approach for 2x2 matrix based on frequency analysis")
+        
+        # Try all possible 2x2 matrices with determinant coprime to 26
+        # This is feasible for 2x2 matrices
+        keys_to_try = []
+        
+        # Generate some candidate matrices based on frequency analysis
+        for a in range(26):
+            for b in range(26):
+                for c in range(26):
+                    for d in range(26):
+                        matrix = np.array([[a, b], [c, d]])
+                        if is_invertible_matrix(matrix):
+                            keys_to_try.append(matrix)
+                            if len(keys_to_try) >= 1000:  # Limit to 1000 matrices
+                                break
+                    if len(keys_to_try) >= 1000:
+                        break
+                if len(keys_to_try) >= 1000:
+                    break
+            if len(keys_to_try) >= 1000:
+                break
+        
+        print(f"Generated {len(keys_to_try)} candidate 2x2 matrices")
+        
+        # Try each matrix
+        best_key = None
+        best_score = 0
+        found_valid_match = False
+        
+        for i, key in enumerate(keys_to_try):
+            if i % 100 == 0 and i > 0:
+                print(f"Tested {i}/{len(keys_to_try)} matrices...")
+            
+            # Decrypt ciphertext with the key
+            decrypted = decrypt_hill(clean_ciphertext, key)
+            
+            # Score decryption and check if it's a valid match
+            score, is_valid_match = score_decryption(decrypted, normalized_text)
+            
+            # If this is a valid match and better than what we've found so far
+            if is_valid_match and score > best_score:
+                best_score = score
+                best_key = key
+                found_valid_match = True
+                print(f"Found valid key with score {score:.2f}:")
+                print(f"Key matrix:\n{key}")
+                print(f"Decryption sample: {decrypted[:50]}...")
+                
+                # If the score is very high, we can stop early
+                if score > 200:
+                    break
+            # If not a valid match but still better than what we have
+            elif not found_valid_match and score > best_score:
+                best_score = score
+                best_key = key
+                print(f"Found potential key with score {score:.2f}:")
+                print(f"Key matrix:\n{key}")
+                print(f"Decryption sample: {decrypted[:50]}...")
+        
+        if best_key is not None:
+            return best_key
     
     # Form matrices with a limit on permutations
     max_permutations = 10000  # Adjust this value based on memory constraints
