@@ -22,7 +22,6 @@ try:
         mod_inverse, matrix_mod_inverse, ALPHABET_SIZE
     )
     from src.hill_cipher import decrypt_hill
-    from data.common_substrings import COMMON_WORDS, KNOWN_PLAINTEXT_SEGMENTS
 except ImportError:
     # If that fails, try relative import
     try:
@@ -31,11 +30,31 @@ except ImportError:
             mod_inverse, matrix_mod_inverse, ALPHABET_SIZE
         )
         from hill_cipher import decrypt_hill
-        from data.common_substrings import COMMON_WORDS, KNOWN_PLAINTEXT_SEGMENTS
     except ImportError:
         print("Error: Could not import required modules.")
-        print("Make sure you have run find_common_substrings.py first.")
         sys.exit(1)
+
+# Define common Portuguese words and phrases
+COMMON_WORDS = [
+    "QUE", "PARA", "COM", "UMA", "ELA", "ERA", "MINHA", "MAS", "POR", "MAIS",
+    "SUA", "QUANDO", "PORQUE", "TINHA", "ESTAVA", "ELE", "DISSE", "COMO", "FOI", "ISSO"
+]
+
+# Define common phrases from avesso_da_pele.txt
+COMMON_PHRASES = [
+    "VOCE", "MINHA", "ESTAVA", "PORQUE", "QUANDO", "AQUELE", "SEMPRE",
+    "MINHAMAE", "PROFESSOR", "ESCOLA", "ALUNOS", "POLICIA", "RASKOLNIKOV"
+]
+
+# Define common substrings from avesso_da_pele.txt
+COMMON_SUBSTRINGS = {
+    5: ["EVOCE", "MINHA", "VOCES", "STAVA", "INHAM", "ESTAV", "OVOCE", "ORQUE", "TINHA", "NHAMA"],
+    6: ["ESTAVA", "INHAMA", "PORQUE", "MINHAM", "NHAMAE", "UEVOCE", "QUANDO", "QUEVOC"],
+    7: ["MINHAMA", "INHAMAE", "QUEVOCE", "EESTAVA", "VOCENAO"],
+    8: ["MINHAMAE", "DISSEQUE", "PROFESSO", "ROFESSOR", "AMINHAMA"],
+    9: ["PROFESSOR", "AMINHAMAE", "EMINHAMAE", "QUANDOVOC", "UANDOVOCE"],
+    10: ["QUANDOVOCE", "SAHARIENNE", "VOCEESTAVA", "PORTOALEGR", "ORTOALEGRE"]
+}
 
 def preprocess_text(text: str) -> str:
     """
@@ -148,19 +167,32 @@ def score_decryption(decrypted_text: str) -> float:
     
     # Check for common words
     for word in COMMON_WORDS:
-        if word in decrypted_text:
-            score += 10  # Higher weight for common words
+        count = decrypted_text.count(word)
+        score += count * 10  # Higher weight for common words
+    
+    # Check for common phrases
+    for phrase in COMMON_PHRASES:
+        count = decrypted_text.count(phrase)
+        score += count * 15  # Even higher weight for common phrases
+    
+    # Check for common substrings
+    for length, substrings in COMMON_SUBSTRINGS.items():
+        for substring in substrings:
+            count = decrypted_text.count(substring)
+            score += count * length  # Weight by length
     
     # Check vowel ratio (Portuguese has ~46% vowels)
     vowels = sum(1 for c in decrypted_text if c in 'AEIOU')
     vowel_ratio = vowels / len(decrypted_text) if decrypted_text else 0
     if 0.4 <= vowel_ratio <= 0.5:
-        score += 5
+        score += 50
+    elif 0.35 <= vowel_ratio <= 0.55:
+        score += 25
     
     # Check for common letter patterns
     common_patterns = ['QUE', 'DE', 'DO', 'DA', 'OS', 'AS', 'EM', 'COM', 'POR']
     for pattern in common_patterns:
-        score += decrypted_text.count(pattern) * 2
+        score += decrypted_text.count(pattern) * 5
     
     return score
 
@@ -183,22 +215,51 @@ def main():
     
     print(f"Performing known plaintext attack on {args.size}x{args.size} Hill cipher...")
     print(f"Ciphertext length: {len(ciphertext)} characters")
-    print(f"Using {len(KNOWN_PLAINTEXT_SEGMENTS)} known plaintext segments")
     
-    # Try each known plaintext segment
+    # Define potential plaintext segments
+    potential_segments = []
+    
+    # Add common substrings from avesso_da_pele.txt
+    for length, substrings in COMMON_SUBSTRINGS.items():
+        if length >= args.size:
+            potential_segments.extend(substrings)
+    
+    # Add common phrases
+    potential_segments.extend(COMMON_PHRASES)
+    
+    # Add common words (only if they're long enough)
+    for word in COMMON_WORDS:
+        if len(word) >= args.size:
+            potential_segments.append(word)
+    
+    # Add some specific longer segments that might be useful
+    if args.size <= 10:
+        potential_segments.extend([
+            "QUANDOVOCE", "MINHAMAE", "PROFESSOR", "VOCEESTAVA", "PORTOALEGRE",
+            "SAHARIENNE", "RASKOLNIKOV", "APRIMEIRAVEZ"
+        ])
+    
+    # Remove duplicates
+    potential_segments = list(set(potential_segments))
+    
+    # Filter by length
+    potential_segments = [segment for segment in potential_segments if len(segment) >= args.size * args.size]
+    
+    print(f"Using {len(potential_segments)} potential plaintext segments")
+    
+    # Try each potential plaintext segment
     all_results = []
     
-    for i, plaintext in enumerate(KNOWN_PLAINTEXT_SEGMENTS):
-        if len(plaintext) >= args.size * args.size:
-            print(f"\nTrying plaintext segment {i+1}/{len(KNOWN_PLAINTEXT_SEGMENTS)}: '{plaintext[:20]}...'")
-            
-            start_time = time.time()
-            results = find_potential_keys(ciphertext, plaintext, args.size)
-            elapsed_time = time.time() - start_time
-            
-            print(f"Found {len(results)} potential keys in {elapsed_time:.2f} seconds")
-            
-            all_results.extend(results)
+    for i, plaintext in enumerate(potential_segments):
+        print(f"\nTrying plaintext segment {i+1}/{len(potential_segments)}: '{plaintext[:20]}...'")
+        
+        start_time = time.time()
+        results = find_potential_keys(ciphertext, plaintext, args.size)
+        elapsed_time = time.time() - start_time
+        
+        print(f"Found {len(results)} potential keys in {elapsed_time:.2f} seconds")
+        
+        all_results.extend(results)
     
     # Remove duplicates and sort by score
     unique_results = []
@@ -225,7 +286,7 @@ def main():
         
         # Check for common words
         found_words = []
-        for word in COMMON_WORDS[:20]:  # Check top 20 common words
+        for word in COMMON_WORDS:
             if word in decrypted:
                 found_words.append(word)
         

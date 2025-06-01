@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Script to find common substrings in a text file that could be used for known-plaintext attacks.
-This script analyzes the avesso_da_pele.txt file to find frequent substrings of various lengths
-that might appear in the ciphertext.
+Script to find common substrings in the known text file that could be used for breaking the Hill cipher.
+This script analyzes the avesso_da_pele.txt file to find frequent substrings that might appear in the ciphertext.
 """
 
 import os
 import re
-from collections import Counter
-from typing import Dict, List, Tuple
 import argparse
+from collections import Counter
+from typing import List, Tuple, Dict
 
 def preprocess_text(text: str) -> str:
     """
@@ -76,6 +75,36 @@ def find_common_substrings(text: str, min_length: int = 5, max_length: int = 15,
     
     return results
 
+def find_repeated_patterns(text: str, min_length: int = 10, max_length: int = 30, min_occurrences: int = 3) -> List[Tuple[str, int]]:
+    """
+    Find repeated patterns in text that might be useful for known plaintext attacks.
+    
+    Args:
+        text: Input text
+        min_length: Minimum pattern length
+        max_length: Maximum pattern length
+        min_occurrences: Minimum number of occurrences to consider
+        
+    Returns:
+        List of (pattern, count) tuples
+    """
+    patterns = []
+    
+    for length in range(min_length, max_length + 1):
+        # Extract all substrings of the current length
+        substrings = [text[i:i+length] for i in range(len(text) - length + 1)]
+        
+        # Count occurrences
+        counts = Counter(substrings)
+        
+        # Get patterns that occur at least min_occurrences times
+        frequent_patterns = [(s, c) for s, c in counts.items() if c >= min_occurrences]
+        
+        patterns.extend(frequent_patterns)
+    
+    # Sort by length (longer patterns first) and then by frequency
+    return sorted(patterns, key=lambda x: (-len(x[0]), -x[1]))
+
 def find_common_words(text: str, min_length: int = 3, top_n: int = 50) -> List[Tuple[str, int]]:
     """
     Find common words in text.
@@ -89,7 +118,7 @@ def find_common_words(text: str, min_length: int = 3, top_n: int = 50) -> List[T
         List of (word, count) tuples
     """
     # Add spaces before preprocessing to preserve word boundaries
-    words = re.findall(r'\b[A-Za-z]+\b', text)
+    words = re.findall(r'\b[A-Za-z]+\b', text.lower())
     
     # Preprocess words
     processed_words = [preprocess_text(word) for word in words]
@@ -103,6 +132,49 @@ def find_common_words(text: str, min_length: int = 3, top_n: int = 50) -> List[T
     # Get top N most common
     return counts.most_common(top_n)
 
+def find_potential_known_plaintext(text: str) -> List[str]:
+    """
+    Find potential known plaintext segments for Hill cipher breaking.
+    
+    Args:
+        text: Input text
+        
+    Returns:
+        List of potential known plaintext segments
+    """
+    # Process text
+    processed_text = preprocess_text(text)
+    
+    # Find repeated patterns
+    patterns = find_repeated_patterns(processed_text, min_occurrences=3)
+    
+    # Find common words
+    words = find_common_words(text)
+    
+    # Combine patterns and words
+    potential_segments = []
+    
+    # Add top patterns
+    for pattern, count in patterns[:10]:
+        potential_segments.append(pattern)
+    
+    # Add top words
+    for word, count in words[:20]:
+        if len(word) >= 5 and word not in potential_segments:
+            potential_segments.append(word)
+    
+    # Add some common phrases from the text
+    common_phrases = [
+        "VOCE", "MINHA", "ESTAVA", "PORQUE", "QUANDO", "AQUELE", "SEMPRE",
+        "MINHAMAE", "PROFESSOR", "ESCOLA", "ALUNOS", "POLICIA", "RASKOLNIKOV"
+    ]
+    
+    for phrase in common_phrases:
+        if phrase not in potential_segments and phrase in processed_text:
+            potential_segments.append(phrase)
+    
+    return potential_segments
+
 def main():
     """Main function."""
     parser = argparse.ArgumentParser(description="Find common substrings in a text file")
@@ -110,6 +182,7 @@ def main():
     parser.add_argument("--min-length", type=int, default=5, help="Minimum substring length")
     parser.add_argument("--max-length", type=int, default=15, help="Maximum substring length")
     parser.add_argument("--top-n", type=int, default=20, help="Number of top substrings to return for each length")
+    parser.add_argument("--output", default="data/known_plaintext_segments.py", help="Output file path")
     
     args = parser.parse_args()
     
@@ -122,12 +195,12 @@ def main():
         with open(args.file, 'r', encoding='latin-1') as f:
             text = f.read()
     
-    # Find common words first (with original text to preserve word boundaries)
+    # Find common words
     print("Finding common words...")
     common_words = find_common_words(text)
     
     print(f"\nTop {len(common_words)} common words:")
-    for word, count in common_words:
+    for word, count in common_words[:20]:
         print(f"  {word}: {count}")
     
     # Preprocess text for substring analysis
@@ -148,24 +221,39 @@ def main():
     print("\nCommon substrings by length:")
     for length in sorted(common_substrings.keys()):
         print(f"\nLength {length}:")
-        for substring, count in common_substrings[length]:
+        for substring, count in common_substrings[length][:5]:  # Show only top 5 for each length
             print(f"  {substring}: {count}")
     
+    # Find potential known plaintext segments
+    print("\nFinding potential known plaintext segments...")
+    potential_segments = find_potential_known_plaintext(text)
+    
+    print(f"\nFound {len(potential_segments)} potential known plaintext segments:")
+    for i, segment in enumerate(potential_segments[:20]):  # Show only top 20
+        print(f"  {i+1}. {segment}")
+    
     # Create output directory if it doesn't exist
-    os.makedirs("data", exist_ok=True)
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
     
     # Save results to file
-    with open("data/common_substrings.py", 'w') as f:
+    with open(args.output, 'w') as f:
         f.write("#!/usr/bin/env python3\n")
         f.write('"""\n')
-        f.write("Common substrings and words from avesso_da_pele.txt.\n")
+        f.write("Known plaintext segments from avesso_da_pele.txt.\n")
         f.write("This file is automatically generated by find_common_substrings.py.\n")
         f.write('"""\n\n')
+        
+        # Write potential known plaintext segments
+        f.write("# Potential known plaintext segments for Hill cipher breaking\n")
+        f.write("KNOWN_PLAINTEXT_SEGMENTS = [\n")
+        for segment in potential_segments:
+            f.write(f"    '{segment}',\n")
+        f.write("]\n\n")
         
         # Write common words
         f.write("# Common words\n")
         f.write("COMMON_WORDS = [\n")
-        for word, count in common_words:
+        for word, count in common_words[:50]:
             f.write(f"    # {count} occurrences\n")
             f.write(f"    '{word}',\n")
         f.write("]\n\n")
@@ -175,32 +263,13 @@ def main():
         f.write("COMMON_SUBSTRINGS = {\n")
         for length in sorted(common_substrings.keys()):
             f.write(f"    {length}: [\n")
-            for substring, count in common_substrings[length]:
+            for substring, count in common_substrings[length][:10]:  # Top 10 for each length
                 f.write(f"        # {count} occurrences\n")
                 f.write(f"        '{substring}',\n")
             f.write("    ],\n")
-        f.write("}\n\n")
-        
-        # Write a dictionary for known plaintext attacks
-        f.write("# Potential known plaintext segments for attacks\n")
-        f.write("KNOWN_PLAINTEXT_SEGMENTS = [\n")
-        
-        # Add the most common substrings of each length
-        for length in sorted(common_substrings.keys(), reverse=True):
-            if common_substrings[length]:
-                substring, count = common_substrings[length][0]
-                f.write(f"    # Length {length}, {count} occurrences\n")
-                f.write(f"    '{substring}',\n")
-        
-        # Add the most common words
-        for word, count in common_words[:10]:
-            if len(word) >= 5:  # Only include words of reasonable length
-                f.write(f"    # Word, {count} occurrences\n")
-                f.write(f"    '{word}',\n")
-        
-        f.write("]\n")
+        f.write("}\n")
     
-    print("\nResults saved to data/common_substrings.py")
+    print(f"\nResults saved to {args.output}")
 
 if __name__ == "__main__":
     main()
