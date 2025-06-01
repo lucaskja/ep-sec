@@ -133,9 +133,63 @@ def generate_invertible_matrices(size: int, max_matrices: int = 1000) -> List[np
     
     return matrices
 
-def check_substring(decrypted_text: str, normalized_text: str, min_length: int = 10) -> bool:
+def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -> Optional[np.ndarray]:
     """
-    Check if a substring of the decrypted text appears in the normalized text.
+    Break Hill cipher by checking if decrypted text is a substring of the normalized text.
+    
+    Args:
+        ciphertext: Encrypted text
+        matrix_size: Size of the Hill cipher matrix
+        normalized_text: Normalized text to search in
+        
+    Returns:
+        Key matrix if found, None otherwise
+    """
+    # Preprocess ciphertext
+    clean_ciphertext = preprocess_text(ciphertext)
+    
+    # Generate invertible matrices
+    print(f"Generating invertible matrices of size {matrix_size}x{matrix_size}...")
+    matrices = generate_invertible_matrices(matrix_size)
+    print(f"Generated {len(matrices)} invertible matrices.")
+    
+    # Try each matrix
+    print("Trying matrices...")
+    best_matrix = None
+    best_score = 0
+    best_decrypted = ""
+    
+    for i, matrix in enumerate(matrices):
+        if i % 100 == 0:
+            print(f"Tried {i} matrices...")
+        
+        # Decrypt ciphertext with the current matrix
+        decrypted = decrypt_hill(clean_ciphertext, matrix)
+        
+        # Check if the decrypted text is a substring of the normalized text
+        is_match, score = check_substring_with_score(decrypted, normalized_text)
+        if is_match and score > best_score:
+            best_matrix = matrix
+            best_score = score
+            best_decrypted = decrypted
+            print(f"Found better key matrix with score {score}:")
+            print(matrix)
+            print(f"Decrypted text (first 100 chars): {decrypted[:100]}...")
+            
+            # If the score is very high, we can stop early
+            if score > 100:
+                break
+    
+    if best_matrix is not None:
+        print(f"Best matrix found with score {best_score}")
+        return best_matrix
+    
+    print("No key matrix found.")
+    return None
+
+def check_substring_with_score(decrypted_text: str, normalized_text: str, min_length: int = 10) -> Tuple[bool, int]:
+    """
+    Check if a substring of the decrypted text appears in the normalized text and return a score.
     
     Args:
         decrypted_text: Decrypted text to check
@@ -143,36 +197,41 @@ def check_substring(decrypted_text: str, normalized_text: str, min_length: int =
         min_length: Minimum length of substring to consider
         
     Returns:
-        True if a substring is found, False otherwise
+        Tuple of (is_match, score)
     """
     # First check for common Portuguese words that should appear in the text
     common_words = ["QUE", "PARA", "COM", "UMA", "ELA", "ERA", "MINHA", "MAS", "POR", "MAIS",
                    "SUA", "QUANDO", "PORQUE", "TINHA", "ESTAVA", "ELE", "DISSE", "COMO", "FOI"]
     
     word_count = 0
+    score = 0
+    
     for word in common_words:
-        if word in decrypted_text:
-            word_count += 1
+        count = decrypted_text.count(word)
+        if count > 0:
+            word_count += count
+            score += count * len(word)
+    
+    # Check for longer substrings
+    longest_match = ""
+    for length in range(min_length, min(50, len(decrypted_text))):
+        for i in range(len(decrypted_text) - length + 1):
+            substring = decrypted_text[i:i+length]
+            if substring in normalized_text:
+                if len(substring) > len(longest_match):
+                    longest_match = substring
+                score += len(substring) * 2
+    
+    if longest_match:
+        print(f"Found matching substring: {longest_match}")
+        return True, score
     
     # If we find at least 3 common words, it's a good sign
     if word_count >= 3:
         print(f"Found {word_count} common Portuguese words in decrypted text")
-        
-        # Check for longer substrings
-        for length in range(min_length, min(50, len(decrypted_text))):
-            for i in range(len(decrypted_text) - length + 1):
-                substring = decrypted_text[i:i+length]
-                if substring in normalized_text:
-                    print(f"Found matching substring: {substring}")
-                    return True
-        
-        # Even if we don't find a direct substring match, if we have enough common words,
-        # it might be a good decryption
-        if word_count >= 5:
-            print(f"Found {word_count} common Portuguese words, considering as a match")
-            return True
+        return True, score
     
-    return False
+    return False, score
 
 def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -> Optional[np.ndarray]:
     """
@@ -196,6 +255,10 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
     
     # Try each matrix
     print("Trying matrices...")
+    best_matrix = None
+    best_score = 0
+    best_decrypted = ""
+    
     for i, matrix in enumerate(matrices):
         if i % 100 == 0:
             print(f"Tried {i} matrices...")
@@ -204,12 +267,71 @@ def break_hill_cipher(ciphertext: str, matrix_size: int, normalized_text: str) -
         decrypted = decrypt_hill(clean_ciphertext, matrix)
         
         # Check if the decrypted text is a substring of the normalized text
-        if check_substring(decrypted, normalized_text):
-            print(f"Found key matrix: {matrix}")
-            return matrix
+        is_match, score = check_substring_with_score(decrypted, normalized_text)
+        if is_match and score > best_score:
+            best_matrix = matrix
+            best_score = score
+            best_decrypted = decrypted
+            print(f"Found better key matrix with score {score}:")
+            print(matrix)
+            print(f"Decrypted text (first 100 chars): {decrypted[:100]}...")
+            
+            # If the score is very high, we can stop early
+            if score > 100:
+                break
+    
+    if best_matrix is not None:
+        print(f"Best matrix found with score {best_score}")
+        return best_matrix
     
     print("No key matrix found.")
     return None
+
+def check_substring_with_score(decrypted_text: str, normalized_text: str, min_length: int = 10) -> Tuple[bool, int]:
+    """
+    Check if a substring of the decrypted text appears in the normalized text and return a score.
+    
+    Args:
+        decrypted_text: Decrypted text to check
+        normalized_text: Normalized text to search in
+        min_length: Minimum length of substring to consider
+        
+    Returns:
+        Tuple of (is_match, score)
+    """
+    # First check for common Portuguese words that should appear in the text
+    common_words = ["QUE", "PARA", "COM", "UMA", "ELA", "ERA", "MINHA", "MAS", "POR", "MAIS",
+                   "SUA", "QUANDO", "PORQUE", "TINHA", "ESTAVA", "ELE", "DISSE", "COMO", "FOI"]
+    
+    word_count = 0
+    score = 0
+    
+    for word in common_words:
+        count = decrypted_text.count(word)
+        if count > 0:
+            word_count += count
+            score += count * len(word)
+    
+    # Check for longer substrings
+    longest_match = ""
+    for length in range(min_length, min(50, len(decrypted_text))):
+        for i in range(len(decrypted_text) - length + 1):
+            substring = decrypted_text[i:i+length]
+            if substring in normalized_text:
+                if len(substring) > len(longest_match):
+                    longest_match = substring
+                score += len(substring) * 2
+    
+    if longest_match:
+        print(f"Found matching substring: {longest_match}")
+        return True, score
+    
+    # If we find at least 3 common words, it's a good sign
+    if word_count >= 3:
+        print(f"Found {word_count} common Portuguese words in decrypted text")
+        return True, score
+    
+    return False, score
 
 def main():
     """Main function."""
