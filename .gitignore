@@ -36,3 +36,4 @@ Thumbs.db
 
 # Reports and results (can be regenerated)
 relatorios/*/
+hill_cipher/results

@@ -60,9 +60,9 @@ class HillCipherGA(HillCipher):
         
         # GA parameters - significantly enhanced for better exploration
         self.population_size = 1000  # Increased from 200 to 1000
-        self.elite_size = 50  # Increased from 20 to 50
+        self.elite_size = 20  # Increased from 20 to 50
         self.mutation_rate = 0.2
-        self.crossover_rate = 0.8
+        self.crossover_rate = 0.5
         self.tournament_size = 7  # Increased from 5 to 7
         self.verbose = True
         
