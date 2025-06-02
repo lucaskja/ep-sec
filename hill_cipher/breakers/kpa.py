@@ -47,6 +47,84 @@ class HillCipherKPA(HillCipher):
         super().__init__(key_size)
         logger.info(f"Initialized Hill Cipher KPA solver with key size {key_size}x{key_size}")
     
+    def is_valid_matrix_mod26(self, matrix: np.ndarray) -> bool:
+        """
+        Check if matrix is valid for Hill cipher in mod 26.
+        
+        Args:
+            matrix: Matrix to check
+            
+        Returns:
+            True if matrix is valid (invertible in mod 26), False otherwise
+        """
+        det = int(round(np.linalg.det(matrix))) % 26
+        return det != 0 and math.gcd(det, 26) == 1
+    
+    def find_valid_blocks(self, P: np.ndarray, C: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Find blocks of plaintext-ciphertext that will yield valid key.
+        
+        Args:
+            P: Plaintext matrix
+            C: Ciphertext matrix
+            
+        Returns:
+            Tuple of (plaintext_block, ciphertext_block)
+            
+        Raises:
+            ValueError: If no valid invertible blocks found
+        """
+        for i in range(0, P.shape[0] - self.key_size + 1):
+            P_block = P[i:i+self.key_size]
+            C_block = C[i:i+self.key_size]
+            if self.is_valid_matrix_mod26(P_block):
+                logger.info(f"Found valid invertible block at position {i}")
+                return P_block, C_block
+        raise ValueError("No valid invertible blocks found")
+    
+    def matrix_mod_inverse(self, matrix: np.ndarray, mod: int = 26) -> np.ndarray:
+        """
+        Calculate the modular multiplicative inverse of a matrix.
+        
+        Args:
+            matrix: Square matrix to invert
+            mod: Modulus (default: 26)
+            
+        Returns:
+            Inverted matrix in the given modulus
+            
+        Raises:
+            ValueError: If the matrix is not invertible in the given modulus
+        """
+        det = int(round(np.linalg.det(matrix))) % mod
+        if det == 0 or math.gcd(det, mod) != 1:
+            raise ValueError("Matrix is not invertible mod 26")
+        
+        # Calculate modular multiplicative inverse of determinant
+        det_inv = pow(det, -1, mod)
+        
+        n = matrix.shape[0]
+        
+        # For 2x2 matrix, use the simple formula
+        if n == 2:
+            adj = np.array([
+                [matrix[1, 1], -matrix[0, 1]],
+                [-matrix[1, 0], matrix[0, 0]]
+            ]) % mod
+            return (det_inv * adj) % mod
+        
+        # For larger matrices, use the adjugate method
+        adj = np.zeros((n, n), dtype=int)
+        for i in range(n):
+            for j in range(n):
+                # Get the minor by removing row i and column j
+                minor = np.delete(np.delete(matrix, i, axis=0), j, axis=1)
+                # Calculate the cofactor
+                cofactor = round(np.linalg.det(minor)) * (-1) ** (i + j)
+                adj[j, i] = cofactor % mod  # Note the transpose here (j,i)
+        
+        return (det_inv * adj) % mod
+    
     def recover_key(self, plaintext: str, ciphertext: str) -> Optional[np.ndarray]:
         """
         Recover the Hill cipher key matrix using known plaintext-ciphertext pairs.
@@ -77,16 +155,21 @@ class HillCipherKPA(HillCipher):
             raise ValueError(f"Need at least {required_blocks} blocks of plaintext-ciphertext pairs")
         
         try:
+            # Find valid blocks that will yield invertible matrix
+            P_blocks, C_blocks = self.find_valid_blocks(P, C)
+            
             # Solve the system of linear equations: P * K = C
             # We need to find K, so K = P^(-1) * C
-            P_blocks = P[:required_blocks]
-            C_blocks = C[:required_blocks]
-            
             P_inv = self.matrix_mod_inverse(P_blocks)
             K = (P_inv @ C_blocks) % self.modulus
             
-            logger.info(f"Successfully recovered {self.key_size}x{self.key_size} key matrix")
-            return K
+            # Verify the key
+            if self.verify_key(K, plaintext[:self.key_size*2], ciphertext[:self.key_size*2]):
+                logger.info(f"Successfully recovered {self.key_size}x{self.key_size} key matrix")
+                return K
+            else:
+                logger.warning("Key verification failed")
+                return None
         except ValueError as e:
             logger.error(f"Failed to recover key: {e}")
             return None

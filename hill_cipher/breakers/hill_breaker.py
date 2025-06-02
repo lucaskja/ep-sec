@@ -105,13 +105,15 @@ def break_hill_cipher(ciphertext: str, key_size: int,
                 
                 return key, decrypted
             else:
-                logger.warning("KPA failed to recover key")
-                return None, None
+                logger.warning("KPA failed to recover key, falling back to GA method")
+                # Fall back to GA method
+                method = 'ga'
         except ValueError as e:
-            logger.error(f"KPA error: {e}")
-            return None, None
+            logger.error(f"KPA error: {e}, falling back to GA method")
+            # Fall back to GA method
+            method = 'ga'
     
-    elif method == 'ga':
+    if method == 'ga':
         # Use genetic algorithm
         language_frequencies = load_language_frequencies()
         ga = HillCipherGA(key_size, language_frequencies)
