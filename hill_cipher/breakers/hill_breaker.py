@@ -33,6 +33,7 @@ def break_hill_cipher(ciphertext: str, key_size: int,
                       method: str = 'auto',
                       generations: int = 100,
                       early_stopping: int = 20,
+                      max_attempts: int = 10,
                       verbose: bool = False,
                       quiet: bool = False) -> Tuple[Optional[np.ndarray], Optional[str]]:
     """
@@ -122,7 +123,8 @@ def break_hill_cipher(ciphertext: str, key_size: int,
         if quiet:
             ga.verbose = False
         
-        key, decrypted = ga.crack(ciphertext, generations, early_stopping)
+        # Run GA with multiple attempts until a solution is found
+        key, decrypted = ga.crack(ciphertext, generations, early_stopping, max_attempts=10)
         
         # Validate against normalized text if available
         if key is not None and normalized_text:
@@ -158,7 +160,9 @@ def main():
     parser.add_argument("--plaintext-file", type=str, help="File containing known plaintext")
     parser.add_argument("--method", type=str, default="auto", choices=["auto", "kpa", "ga"], help="Attack method")
     parser.add_argument("--generations", type=int, default=100, help="Maximum number of generations for GA")
+    parser.add_argument("--population-size", type=int, default=1000, help="Population size for GA")
     parser.add_argument("--early-stopping", type=int, default=20, help="Stop if no improvement after this many generations")
+    parser.add_argument("--max-attempts", type=int, default=10, help="Maximum number of GA attempts with different initial populations")
     parser.add_argument("--output-dir", type=str, default="results", help="Directory to save results")
     parser.add_argument("--log-file", type=str, help="File to save logs")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
@@ -218,6 +222,7 @@ def main():
         method=args.method,
         generations=args.generations,
         early_stopping=args.early_stopping,
+        max_attempts=args.max_attempts,
         verbose=args.verbose,
         quiet=args.quiet
     )
