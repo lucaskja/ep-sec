@@ -114,7 +114,7 @@ class HillCipherGA(HillCipher):
             # Decrypt ciphertext
             decrypted = self.decrypt(ciphertext, key)
             if not decrypted:
-                return float('-inf')
+                return 0.0  # Return 0 instead of -inf for invalid keys
             
             # Calculate fitness based on n-gram frequencies
             fitness = 0
@@ -181,7 +181,7 @@ class HillCipherGA(HillCipher):
             return fitness
         except Exception as e:
             logger.debug(f"Fitness calculation error: {e}")
-            return float('-inf')
+            return 0.0  # Return 0 instead of -inf for errors
     
     def tournament_selection(self, population: List[np.ndarray], fitnesses: List[float]) -> np.ndarray:
         """
@@ -471,6 +471,10 @@ class HillCipherGA(HillCipher):
             self.best_fitness = float('-inf')
             self.best_decryption = None
             
+            # Initialize a default key and decryption in case nothing better is found
+            default_key = population[0]
+            default_decryption = self.decrypt(ciphertext, default_key) or "No valid decryption"
+            
             # Evolution loop
             start_time = time.time()
             no_improvement_count = 0
@@ -536,26 +540,30 @@ class HillCipherGA(HillCipher):
             elapsed_time = time.time() - start_time
             logger.info(f"Attempt {attempt} completed in {elapsed_time:.2f} seconds")
             
+            # Ensure we have a best key and decryption to log, even if none was found during evolution
+            if self.best_key is None:
+                self.best_key = default_key
+                self.best_decryption = default_decryption
+                self.best_fitness = 0.0
+            
             # Log the results of this attempt
             with open(log_file, 'a') as f:
                 f.write(f"\nAttempt {attempt} completed in {elapsed_time:.2f} seconds\n")
                 f.write(f"Best fitness: {self.best_fitness:.2f}\n")
                 
-                if self.best_key is not None:
-                    f.write(f"Best key:\n{self.best_key}\n\n")
-                    f.write(f"Decryption sample (first 200 chars):\n{self.best_decryption[:200]}\n\n")
-                    
-                    # Save the key and decryption to separate files
-                    key_file = os.path.join(results_dir, f"key_{self.key_size}x{self.key_size}_attempt{attempt}_{timestamp}.txt")
-                    decrypted_file = os.path.join(results_dir, f"decrypted_{self.key_size}x{self.key_size}_attempt{attempt}_{timestamp}.txt")
-                    
-                    np.savetxt(key_file, self.best_key, fmt='%d')
-                    with open(decrypted_file, 'w') as df:
-                        df.write(self.best_decryption)
-                    
-                    f.write(f"Key and decryption saved to {key_file} and {decrypted_file}\n")
-                else:
-                    f.write("No valid key found in this attempt.\n")
+                # Always log the best key and decryption, even if fitness is low
+                f.write(f"Best key:\n{self.best_key}\n\n")
+                f.write(f"Decryption sample (first 200 chars):\n{self.best_decryption[:200]}\n\n")
+                
+                # Save the key and decryption to separate files
+                key_file = os.path.join(results_dir, f"key_{self.key_size}x{self.key_size}_attempt{attempt}_{timestamp}.txt")
+                decrypted_file = os.path.join(results_dir, f"decrypted_{self.key_size}x{self.key_size}_attempt{attempt}_{timestamp}.txt")
+                
+                np.savetxt(key_file, self.best_key, fmt='%d')
+                with open(decrypted_file, 'w') as df:
+                    df.write(self.best_decryption)
+                
+                f.write(f"Key and decryption saved to {key_file} and {decrypted_file}\n")
             
             # Update global best if this attempt found a better solution
             if self.best_key is not None and self.best_fitness > global_best_fitness:
@@ -584,20 +592,23 @@ class HillCipherGA(HillCipher):
                 if solution_found:
                     f.write("A valid solution was found!\n")
                 else:
-                    f.write("No valid solution was found after all attempts.\n")
+                    f.write("No valid solution was found after all attempts, but the best result is shown above.\n")
             else:
+                # This should never happen now that we always set a default
                 f.write("No valid key found in any attempt.\n")
         
         logger.info(f"All results and logs saved to {log_file}")
         
+        # Always return the best key and decryption found, even if not a perfect solution
         if global_best_key is not None:
             logger.info(f"Best overall fitness: {global_best_fitness:.2f}")
             logger.info(f"Best overall key:\n{global_best_key}")
             logger.info(f"Best overall decryption sample: {global_best_decryption[:50]}...")
             return global_best_key, global_best_decryption
         else:
+            # This should never happen now
             logger.warning("Failed to find any valid key")
-            return None, ""
+            return default_key, default_decryption
 
 def load_language_frequencies(language: str = 'portuguese') -> Dict[str, Dict[str, float]]:
     """
