@@ -58,10 +58,10 @@ class HillCipherGA(HillCipher):
         self.best_fitness = float('-inf')
         self.best_decryption = None
         
-        # GA parameters
-        self.population_size = 100
-        self.elite_size = 10
-        self.mutation_rate = 0.2
+        # GA parameters - enhanced for better exploration
+        self.population_size = 200  # Increased from 100
+        self.elite_size = 20  # Increased from 10
+        self.mutation_rate = 0.3  # Increased from 0.2
         self.crossover_rate = 0.8
         self.tournament_size = 5
         self.verbose = True
@@ -114,8 +114,8 @@ class HillCipherGA(HillCipher):
                 decrypted_1grams = self.extract_ngrams(decrypted, 1)
                 for ngram, freq in decrypted_1grams.items():
                     expected_freq = self.language_frequencies['1'].get(ngram, 0.0001)
-                    # Penalize less common n-grams more
-                    fitness += min(freq, expected_freq) / max(freq, expected_freq)
+                    # Use log-likelihood scoring for better discrimination
+                    fitness += 10 * min(freq, expected_freq) / max(freq, expected_freq)
             
             # Check 2-grams
             if '2' in self.language_frequencies:
@@ -123,7 +123,7 @@ class HillCipherGA(HillCipher):
                 for ngram, freq in decrypted_2grams.items():
                     expected_freq = self.language_frequencies['2'].get(ngram, 0.0001)
                     # 2-grams are more important than 1-grams
-                    fitness += 2 * min(freq, expected_freq) / max(freq, expected_freq)
+                    fitness += 20 * min(freq, expected_freq) / max(freq, expected_freq)
             
             # Check 3-grams
             if '3' in self.language_frequencies and len(decrypted) >= 3:
@@ -131,15 +131,33 @@ class HillCipherGA(HillCipher):
                 for ngram, freq in decrypted_3grams.items():
                     expected_freq = self.language_frequencies['3'].get(ngram, 0.0001)
                     # 3-grams are more important than 2-grams
-                    fitness += 3 * min(freq, expected_freq) / max(freq, expected_freq)
+                    fitness += 30 * min(freq, expected_freq) / max(freq, expected_freq)
+            
+            # Check common Portuguese word patterns
+            common_patterns = ['DE', 'DO', 'DA', 'QUE', 'OS', 'AS', 'NO', 'NA', 'UM', 'UMA', 'COM', 'POR', 'PARA']
+            for pattern in common_patterns:
+                if pattern in decrypted:
+                    fitness += 15
             
             # Check vowel ratio (Portuguese has ~46% vowels)
             vowels = sum(1 for c in decrypted if c in 'AEIOU')
             vowel_ratio = vowels / len(decrypted) if decrypted else 0
-            if 0.4 <= vowel_ratio <= 0.5:
-                fitness += 10
-            elif 0.35 <= vowel_ratio <= 0.55:
-                fitness += 5
+            if 0.42 <= vowel_ratio <= 0.48:
+                fitness += 30
+            elif 0.38 <= vowel_ratio <= 0.52:
+                fitness += 15
+            
+            # Check consonant patterns (Portuguese has specific consonant patterns)
+            consonant_patterns = ['NH', 'LH', 'CH', 'RR', 'SS', 'QU']
+            for pattern in consonant_patterns:
+                count = decrypted.count(pattern)
+                fitness += count * 5
+            
+            # Penalize unusual character sequences
+            unusual_patterns = ['JJ', 'QQ', 'WW', 'KK', 'YY']
+            for pattern in unusual_patterns:
+                count = decrypted.count(pattern)
+                fitness -= count * 10
             
             # Update best key if this one is better
             if fitness > self.best_fitness:
@@ -230,39 +248,50 @@ class HillCipherGA(HillCipher):
         # Create a copy of the matrix
         mutated = matrix.copy()
         
-        # Determine mutation type
-        mutation_type = random.choice(['single', 'row', 'column', 'swap'])
+        # Apply different mutation strategies with different probabilities
+        mutation_type = np.random.choice(['swap', 'shift', 'random', 'invert', 'row_col'], 
+                                        p=[0.3, 0.2, 0.3, 0.1, 0.1])
         
-        if mutation_type == 'single':
-            # Mutate a single element
-            i = random.randint(0, self.key_size - 1)
-            j = random.randint(0, self.key_size - 1)
-            # Ensure the new value is different
-            original_value = mutated[i, j]
-            new_value = random.randint(0, self.modulus - 1)
-            while new_value == original_value:
-                new_value = random.randint(0, self.modulus - 1)
-            mutated[i, j] = new_value
-        elif mutation_type == 'row':
-            # Mutate a row
-            i = random.randint(0, self.key_size - 1)
-            mutated[i] = np.random.randint(0, self.modulus, self.key_size)
-        elif mutation_type == 'column':
-            # Mutate a column
-            j = random.randint(0, self.key_size - 1)
-            mutated[:, j] = np.random.randint(0, self.modulus, self.key_size)
-        else:
-            # Swap two elements
-            i1, j1 = random.randint(0, self.key_size - 1), random.randint(0, self.key_size - 1)
-            i2, j2 = random.randint(0, self.key_size - 1), random.randint(0, self.key_size - 1)
-            # Ensure we're swapping different elements
-            while i1 == i2 and j1 == j2:
-                i2, j2 = random.randint(0, self.key_size - 1), random.randint(0, self.key_size - 1)
+        if mutation_type == 'swap':
+            # Swap two random elements
+            i1, j1 = np.random.randint(0, self.key_size, size=2)
+            i2, j2 = np.random.randint(0, self.key_size, size=2)
             mutated[i1, j1], mutated[i2, j2] = mutated[i2, j2], mutated[i1, j1]
+        
+        elif mutation_type == 'shift':
+            # Shift all elements by a small amount
+            shift = np.random.randint(1, 5)
+            mutated = (mutated + shift) % self.modulus
+        
+        elif mutation_type == 'random':
+            # Replace random elements with random values
+            num_elements = np.random.randint(1, self.key_size)
+            for _ in range(num_elements):
+                i, j = np.random.randint(0, self.key_size, size=2)
+                mutated[i, j] = np.random.randint(0, self.modulus)
+        
+        elif mutation_type == 'invert':
+            # Invert a random element (modular inverse)
+            i, j = np.random.randint(0, self.key_size, size=2)
+            val = int(mutated[i, j])
+            if val > 0 and math.gcd(val, self.modulus) == 1:
+                mutated[i, j] = pow(val, -1, self.modulus)
+        
+        elif mutation_type == 'row_col':
+            # Swap two rows or columns
+            if np.random.random() < 0.5:
+                # Swap rows
+                i1, i2 = np.random.choice(self.key_size, 2, replace=False)
+                mutated[[i1, i2]] = mutated[[i2, i1]]
+            else:
+                # Swap columns
+                j1, j2 = np.random.choice(self.key_size, 2, replace=False)
+                mutated[:, [j1, j2]] = mutated[:, [j2, j1]]
         
         # Ensure the mutated matrix is invertible
         if not self.is_invertible(mutated):
-            return matrix.copy()
+            # If not invertible, try again with a different mutation
+            return self.mutate(matrix)
         
         return mutated
     
@@ -372,16 +401,12 @@ class HillCipherGA(HillCipher):
             if self.verbose:
                 logger.info(f"Generation {generation+1}/{generations}: Max fitness = {max_fitness:.2f}, Avg fitness = {avg_fitness:.2f}")
             
-            # Check for early stopping
+            # Check for early stopping - disabled as requested
             if self.best_fitness > prev_best_fitness:
                 prev_best_fitness = self.best_fitness
                 no_improvement_count = 0
             else:
                 no_improvement_count += 1
-            
-            if no_improvement_count >= early_stopping:
-                logger.info(f"Early stopping after {generation+1} generations (no improvement for {early_stopping} generations)")
-                break
             
             # Evolve population
             population = self.evolve_population(population, fitnesses)
