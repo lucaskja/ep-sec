@@ -61,10 +61,16 @@ class HillCipherGA(HillCipher):
         # GA parameters - significantly enhanced for better exploration
         self.population_size = 1000  # Increased from 200 to 1000
         self.elite_size = 50  # Increased from 20 to 50
-        self.mutation_rate = 0.2  # Increased from 0.3 to 0.5
+        self.mutation_rate = 0.5  # Increased from 0.2 to 0.5
         self.crossover_rate = 0.8
-        self.tournament_size = 5  # Increased from 5 to 7
+        self.tournament_size = 7  # Increased from 5 to 7
         self.verbose = True
+        
+        # Known correct keys for verification only (not used during evolution)
+        self.known_keys = {}
+        if key_size == 2:
+            self.known_keys["unknown"] = np.array([[23, 14], [0, 5]])
+            self.known_keys["known"] = np.array([[23, 17], [0, 9]])
         
         logger.info(f"Initialized Hill Cipher GA solver with key size {key_size}x{key_size}")
     
@@ -503,7 +509,7 @@ class HillCipherGA(HillCipher):
             logger.info(f"Attempt {attempt} completed in {elapsed_time:.2f} seconds")
             
             # Ensure we have a best key and decryption to log, even if none was found during evolution
-            if self.best_key is None:
+            if self.best_key is None or self.best_fitness <= 0:
                 self.best_key = default_key
                 self.best_decryption = default_decryption
                 self.best_fitness = 0.0
@@ -554,12 +560,30 @@ class HillCipherGA(HillCipher):
                 # Check if the best key matches any of the known correct keys (for verification only)
                 if self.key_size == 2:
                     # Known key for unknown text: [[23 14][0 5]]
-                    if np.array_equal(global_best_key, np.array([[23, 14], [0, 5]])):
+                    unknown_key = np.array([[23, 14], [0, 5]])
+                    if np.array_equal(global_best_key, unknown_key):
                         f.write("SUCCESS! Found the correct key for unknown text: [[23 14][0 5]]\n")
+                        logger.info("SUCCESS! Found the correct key for unknown text: [[23 14][0 5]]")
                     
                     # Known key for known text: [[23 17][0 9]]
-                    elif np.array_equal(global_best_key, np.array([[23, 17], [0, 9]])):
+                    known_key = np.array([[23, 17], [0, 9]])
+                    if np.array_equal(global_best_key, known_key):
                         f.write("SUCCESS! Found the correct key for known text: [[23 17][0 9]]\n")
+                        logger.info("SUCCESS! Found the correct key for known text: [[23 17][0 9]]")
+                    
+                    # Check if the decryption is similar to what we'd get with the known keys
+                    try:
+                        unknown_decryption = self.decrypt(ciphertext, unknown_key)
+                        known_decryption = self.decrypt(ciphertext, known_key)
+                        
+                        if unknown_decryption and global_best_decryption[:50] == unknown_decryption[:50]:
+                            f.write("SUCCESS! Decryption matches what we'd get with the unknown text key.\n")
+                            logger.info("SUCCESS! Decryption matches what we'd get with the unknown text key.")
+                        elif known_decryption and global_best_decryption[:50] == known_decryption[:50]:
+                            f.write("SUCCESS! Decryption matches what we'd get with the known text key.\n")
+                            logger.info("SUCCESS! Decryption matches what we'd get with the known text key.")
+                    except Exception as e:
+                        logger.debug(f"Error checking decryption similarity: {e}")
                 
                 if solution_found:
                     f.write("A valid solution was found!\n")
