@@ -101,16 +101,6 @@ class HillCipherGA(HillCipher):
             Fitness score (higher is better)
         """
         try:
-            # Check if this is one of the known correct keys for 2x2
-            if self.key_size == 2:
-                # Known key for unknown text: [[23 14][0 5]]
-                if np.array_equal(key, np.array([[23, 14], [0, 5]])):
-                    return float('inf')  # Give highest possible score
-                
-                # Known key for known text: [[23 17][0 9]]
-                if np.array_equal(key, np.array([[23, 17], [0, 9]])):
-                    return float('inf')  # Give highest possible score
-            
             # Decrypt ciphertext
             decrypted = self.decrypt(ciphertext, key)
             if not decrypted:
@@ -259,8 +249,8 @@ class HillCipherGA(HillCipher):
         mutated = matrix.copy()
         
         # Apply different mutation strategies with different probabilities
-        mutation_type = np.random.choice(['swap', 'shift', 'random', 'invert', 'row_col', 'targeted'], 
-                                        p=[0.25, 0.15, 0.25, 0.1, 0.1, 0.15])
+        mutation_type = np.random.choice(['swap', 'shift', 'random', 'invert', 'row_col'], 
+                                        p=[0.3, 0.2, 0.3, 0.1, 0.1])
         
         if mutation_type == 'swap':
             # Swap two random elements
@@ -298,26 +288,6 @@ class HillCipherGA(HillCipher):
                 j1, j2 = np.random.choice(self.key_size, 2, replace=False)
                 mutated[:, [j1, j2]] = mutated[:, [j2, j1]]
         
-        elif mutation_type == 'targeted':
-            # Targeted mutation for 2x2 matrices to explore near known solutions
-            if self.key_size == 2:
-                # Choose which known key to target
-                if random.random() < 0.5:
-                    target = np.array([[23, 14], [0, 5]])  # Unknown text key
-                else:
-                    target = np.array([[23, 17], [0, 9]])  # Known text key
-                
-                # Randomly choose one element to move toward the target
-                i, j = np.random.randint(0, self.key_size, size=2)
-                current = int(mutated[i, j])
-                target_val = int(target[i, j])
-                
-                # Move toward target value with some randomness
-                if current < target_val:
-                    mutated[i, j] = min(current + np.random.randint(1, 5), target_val)
-                elif current > target_val:
-                    mutated[i, j] = max(current - np.random.randint(1, 5), target_val)
-        
         # Ensure the mutated matrix is invertible
         if not self.is_invertible(mutated):
             # If not invertible, try again with a different mutation
@@ -332,14 +302,6 @@ class HillCipherGA(HillCipher):
         Returns:
             Random invertible key matrix
         """
-        # First, try to include the known correct keys with some probability
-        if self.key_size == 2 and random.random() < 0.05:  # 5% chance to include known keys
-            if random.random() < 0.5:
-                return np.array([[23, 14], [0, 5]])  # Known key for unknown text
-            else:
-                return np.array([[23, 17], [0, 9]])  # Known key for known text
-        
-        # Otherwise generate random keys as before
         while True:
             # Generate random matrix
             key = np.random.randint(0, self.modulus, (self.key_size, self.key_size))
@@ -589,6 +551,16 @@ class HillCipherGA(HillCipher):
                 f.write(f"Best overall key:\n{global_best_key}\n\n")
                 f.write(f"Best overall decryption (first 500 chars):\n{global_best_decryption[:500]}\n\n")
                 
+                # Check if the best key matches any of the known correct keys (for verification only)
+                if self.key_size == 2:
+                    # Known key for unknown text: [[23 14][0 5]]
+                    if np.array_equal(global_best_key, np.array([[23, 14], [0, 5]])):
+                        f.write("SUCCESS! Found the correct key for unknown text: [[23 14][0 5]]\n")
+                    
+                    # Known key for known text: [[23 17][0 9]]
+                    elif np.array_equal(global_best_key, np.array([[23, 17], [0, 9]])):
+                        f.write("SUCCESS! Found the correct key for known text: [[23 17][0 9]]\n")
+                
                 if solution_found:
                     f.write("A valid solution was found!\n")
                 else:
@@ -604,6 +576,14 @@ class HillCipherGA(HillCipher):
             logger.info(f"Best overall fitness: {global_best_fitness:.2f}")
             logger.info(f"Best overall key:\n{global_best_key}")
             logger.info(f"Best overall decryption sample: {global_best_decryption[:50]}...")
+            
+            # Log if we found one of the known correct keys (for verification only)
+            if self.key_size == 2:
+                if np.array_equal(global_best_key, np.array([[23, 14], [0, 5]])):
+                    logger.info("SUCCESS! Found the correct key for unknown text: [[23 14][0 5]]")
+                elif np.array_equal(global_best_key, np.array([[23, 17], [0, 9]])):
+                    logger.info("SUCCESS! Found the correct key for known text: [[23 17][0 9]]")
+            
             return global_best_key, global_best_decryption
         else:
             # This should never happen now
