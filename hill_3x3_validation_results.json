@@ -1,0 +1,14 @@
+{
+  "known_3x3": {
+    "success": false,
+    "key": null,
+    "decrypted": null,
+    "score": null
+  },
+  "unknown_3x3": {
+    "success": false,
+    "key": null,
+    "decrypted": null,
+    "score": null
+  }
+}

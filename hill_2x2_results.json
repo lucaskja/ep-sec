@@ -1,0 +1,36 @@
+{
+  "known_2x2": {
+    "success": true,
+    "method": "KPA",
+    "key": [
+      [
+        23,
+        0
+      ],
+      [
+        17,
+        9
+      ]
+    ],
+    "decrypted": "NTAOPARANAOTERQUEENTRARNUMALUTACORPORALCOMMINHAMAEVOCETEVEQUESETRANCARNOBANHEIROEPASSOUALGUMTEMPOOUVINDOSEUSGRITOSEASBAT",
+    "score": -48.81823755459864,
+    "time": 0.035301923751831055
+  },
+  "unknown_2x2": {
+    "success": true,
+    "method": "KPA",
+    "key": [
+      [
+        23,
+        0
+      ],
+      [
+        14,
+        5
+      ]
+    ],
+    "decrypted": "CHUVOSAORITMODACIDADEDIMINUIASPESSOASFICAMEMCASAEOSOMCONSTANTEDACHUVACRIAUMAMELODIARELAXANTEEODIAPERFEITOPARALERAQUELELI",
+    "score": -1643759.5847408932,
+    "time": 0.03183174133300781
+  }
+}
