@@ -131,7 +131,7 @@ class OptimizedCudaHillBreaker:
         keys_tested = 0
         
         # Generate keys using search space reduction
-        key_generator = self.search_space_reducer.generate_smart_keys(max_keys)
+        key_generator = self.search_space_reducer.generate_keys_smart_sampling(max_keys)
         
         # Process in large batches for GPU efficiency
         key_batch = []
@@ -348,7 +348,7 @@ class OptimizedCudaHillBreaker:
         best_decrypted = ""
         keys_tested = 0
         
-        key_generator = self.search_space_reducer.generate_smart_keys(max_keys)
+        key_generator = self.search_space_reducer.generate_keys_smart_sampling(max_keys)
         
         for key in key_generator:
             try:
