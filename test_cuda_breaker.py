@@ -13,9 +13,9 @@ def test_cuda_breaker():
     """Test the fully optimized CUDA breaker"""
     
     print("=" * 60)
-    print("FULLY OPTIMIZED CUDA HILL CIPHER BREAKER TEST")
+    print("FIXED CUDA HILL CIPHER BREAKER TEST")
     print("=" * 60)
-    print("This should achieve 80-95% GPU utilization!")
+    print("Focus: Correctness first, then reasonable GPU utilization")
     print()
     
     # Test ciphertext
@@ -23,25 +23,25 @@ def test_cuda_breaker():
     
     print(f"Testing 2x2 Hill cipher breaking...")
     print(f"Ciphertext length: {len(test_ciphertext)} characters")
-    print(f"Expected: VERY HIGH GPU utilization (80-95%)")
-    print(f"Features: Parallel matrix ops + GPU scoring")
+    print(f"Expected: Correct key [23, 0, 17, 9] and readable Portuguese text")
+    print(f"Features: Systematic key generation + accurate scoring")
     print()
     
-    # Test fully optimized CUDA breaker with large batch
+    # Test fixed CUDA breaker
     cmd = [
         sys.executable,
-        "hill_cipher/breakers/fully_optimized_cuda_breaker.py",
+        "hill_cipher/breakers/cuda_breaker_fixed.py",
         "--ciphertext", test_ciphertext,
         "--key-size", "2",
         "--max-keys", "10000",
-        "--batch-size", "8192"  # Very large batch for maximum GPU utilization
+        "--batch-size", "1024"
     ]
     
     print("Command:")
     print(" ".join(cmd))
     print()
     print("[IMPORTANT] Monitor GPU usage with: nvidia-smi -l 1")
-    print("[EXPECTED] GPU utilization should be 80-95% during execution")
+    print("[EXPECTED] Should find correct key and readable Portuguese text")
     print("=" * 60)
     
     try:
@@ -51,16 +51,16 @@ def test_cuda_breaker():
         if result.returncode == 0:
             print()
             print("=" * 60)
-            print("[SUCCESS] Fully optimized CUDA breaker completed!")
+            print("[SUCCESS] Fixed CUDA breaker completed!")
             print()
-            print("GPU Utilization Check:")
-            print("- Did you see 80-95% GPU usage during execution?")
-            print("- If yes: Optimization successful!")
-            print("- If no: There may be other bottlenecks")
+            print("Correctness Check:")
+            print("- Did it find key [23, 0, 17, 9] or similar?")
+            print("- Is the decrypted text readable Portuguese?")
+            print("- If yes: Fix successful!")
         else:
             print()
             print("=" * 60)
-            print("[ERROR] Fully optimized CUDA breaker failed")
+            print("[ERROR] Fixed CUDA breaker failed")
             print("Check the error messages above")
             
     except subprocess.TimeoutExpired:
@@ -79,12 +79,13 @@ def test_cuda_breaker():
         print(f"[ERROR] Test failed: {e}")
     
     print()
-    print("Performance Comparison Expected:")
-    print("- Original CUDA breaker: 85 keys/sec, 1-5% GPU")
-    print("- Fully optimized: 500+ keys/sec, 80-95% GPU")
+    print("Expected Results:")
+    print("- Correct key: [23, 0, 17, 9] (as 2x2 matrix)")
+    print("- Readable Portuguese text starting with known phrases")
+    print("- Reasonable performance: 200-500 keys/sec")
     print()
-    print("If you don't see high GPU utilization, the bottleneck")
-    print("might be in CPU-GPU memory transfers or other factors.")
+    print("This version prioritizes finding the CORRECT answer")
+    print("over maximum GPU utilization.")
 
 if __name__ == "__main__":
     test_cuda_breaker()

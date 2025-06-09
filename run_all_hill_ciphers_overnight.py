@@ -24,55 +24,55 @@ class HillCipherBatchRunner:
         self.setup_directories()
         self.setup_logging()
         
-        # Test cases with fully optimized GPU settings
+        # Test cases with focus on correctness
         self.test_cases = [
             {
                 "name": "3x3_known",
                 "file": "textos_conhecidos/Cifrado/Hill/3x3_texto_cifrado.txt",
                 "key_size": 3,
-                "max_keys": 20000,
-                "batch_size": 8192,
-                "expected_time": "5-15 minutes"
+                "max_keys": 50000,
+                "batch_size": 1024,
+                "expected_time": "10-30 minutes"
             },
             {
                 "name": "3x3_unknown", 
                 "file": "textos_desconhecidos/Cifrado/Hill/3x3_texto_cifrado.txt",
                 "key_size": 3,
-                "max_keys": 20000,
-                "batch_size": 8192,
-                "expected_time": "5-15 minutes"
+                "max_keys": 50000,
+                "batch_size": 1024,
+                "expected_time": "10-30 minutes"
             },
             {
                 "name": "4x4_known",
                 "file": "textos_conhecidos/Cifrado/Hill/4x4_texto_cifrado.txt", 
                 "key_size": 4,
-                "max_keys": 200000,
-                "batch_size": 4096,
-                "expected_time": "15-60 minutes"
+                "max_keys": 100000,
+                "batch_size": 512,
+                "expected_time": "1-3 hours"
             },
             {
                 "name": "4x4_unknown",
                 "file": "textos_desconhecidos/Cifrado/Hill/4x4_texto_cifrado.txt",
                 "key_size": 4, 
-                "max_keys": 200000,
-                "batch_size": 4096,
-                "expected_time": "15-60 minutes"
+                "max_keys": 100000,
+                "batch_size": 512,
+                "expected_time": "1-3 hours"
             },
             {
                 "name": "5x5_known",
                 "file": "textos_conhecidos/Cifrado/Hill/5x5_texto_cifrado.txt",
                 "key_size": 5,
-                "max_keys": 2000000,
-                "batch_size": 2048,
-                "expected_time": "1-4 hours"
+                "max_keys": 200000,
+                "batch_size": 256,
+                "expected_time": "3-8 hours"
             },
             {
                 "name": "5x5_unknown",
                 "file": "textos_desconhecidos/Cifrado/Hill/5x5_texto_cifrado.txt",
                 "key_size": 5,
-                "max_keys": 2000000,
-                "batch_size": 2048,
-                "expected_time": "1-4 hours"
+                "max_keys": 200000,
+                "batch_size": 256,
+                "expected_time": "3-8 hours"
             }
         ]
         
@@ -102,7 +102,7 @@ class HillCipherBatchRunner:
         
         self.logger = logging.getLogger(__name__)
         self.logger.info("="*80)
-        self.logger.info("FULLY OPTIMIZED HILL CIPHER OVERNIGHT BREAKING SESSION STARTED")
+        self.logger.info("FIXED HILL CIPHER OVERNIGHT BREAKING SESSION STARTED")
         self.logger.info("="*80)
         
     def read_ciphertext(self, file_path):
@@ -127,10 +127,10 @@ class HillCipherBatchRunner:
         self.logger.info(f"Starting {test_name} - {key_size}x{key_size} matrix")
         self.logger.info(f"Ciphertext length: {len(ciphertext)} characters")
         self.logger.info(f"Max keys to test: {max_keys:,}")
-        self.logger.info(f"GPU batch size: {batch_size:,} (fully optimized)")
+        self.logger.info(f"GPU batch size: {batch_size:,} (fixed approach)")
         
-        # Prepare command for fully optimized CUDA breaker
-        cuda_breaker_path = self.base_dir / "hill_cipher" / "breakers" / "fully_optimized_cuda_breaker.py"
+        # Prepare command for fixed CUDA breaker
+        cuda_breaker_path = self.base_dir / "hill_cipher" / "breakers" / "cuda_breaker_fixed.py"
         cmd = [
             sys.executable,
             str(cuda_breaker_path),
