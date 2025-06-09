@@ -193,7 +193,7 @@ class HillCipherBatchRunner:
             
             # Log results
             if success:
-                self.logger.info(f"✅ SUCCESS - {test_name} completed in {elapsed_time:.1f}s")
+                self.logger.info(f"SUCCESS - {test_name} completed in {elapsed_time:.1f}s")
                 if key_found:
                     self.logger.info(f"   Key found: {key_found}")
                 if score is not None:
@@ -204,7 +204,7 @@ class HillCipherBatchRunner:
                     preview = decrypted_text[:100] + "..." if len(decrypted_text) > 100 else decrypted_text
                     self.logger.info(f"   Decrypted preview: {preview}")
             else:
-                self.logger.error(f"❌ FAILED - {test_name} failed after {elapsed_time:.1f}s")
+                self.logger.error(f"FAILED - {test_name} failed after {elapsed_time:.1f}s")
                 if stderr:
                     self.logger.error(f"   Error: {stderr}")
             
@@ -221,7 +221,7 @@ class HillCipherBatchRunner:
             }
             
         except subprocess.TimeoutExpired:
-            self.logger.error(f"⏰ TIMEOUT - {test_name} exceeded 24 hour limit")
+            self.logger.error(f"TIMEOUT - {test_name} exceeded 24 hour limit")
             return {
                 "success": False,
                 "elapsed_time": 86400,
@@ -229,7 +229,7 @@ class HillCipherBatchRunner:
                 "timeout": True
             }
         except Exception as e:
-            self.logger.error(f"💥 ERROR - {test_name} crashed: {e}")
+            self.logger.error(f"ERROR - {test_name} crashed: {e}")
             return {
                 "success": False,
                 "elapsed_time": time.time() - start_time,
@@ -359,9 +359,9 @@ class HillCipherBatchRunner:
 
 def main():
     """Main function"""
-    print("🚀 Fully Optimized Hill Cipher Overnight Breaking Session")
+    print("Fully Optimized Hill Cipher Overnight Breaking Session")
     print("=" * 60)
-    print("🔥 Using fully optimized CUDA breaker with maximum GPU utilization")
+    print("Using fully optimized CUDA breaker with maximum GPU utilization")
     
     # Initialize runner
     runner = HillCipherBatchRunner()
@@ -370,7 +370,7 @@ def main():
         # Run all tests
         results = runner.run_all_tests()
         
-        print("\n✅ Fully optimized overnight session completed successfully!")
+        print("\nFully optimized overnight session completed successfully!")
         print(f"Check results in: {runner.results_dir}")
         
         return 0
