@@ -52,7 +52,6 @@ class FullyOptimizedCudaHillBreaker:
         
         if self.cuda_available:
             self._setup_gpu()
-            self._setup_gpu_scoring()
         
         logger.info(f"Initialized FullyOptimizedCudaHillBreaker for {key_size}x{key_size} cipher")
         logger.info(f"GPU acceleration: {'Enabled' if self.cuda_available else 'Disabled'}")
@@ -74,31 +73,6 @@ class FullyOptimizedCudaHillBreaker:
         except Exception as e:
             logger.warning(f"GPU setup failed: {e}")
             self.cuda_available = False
-    
-    def _setup_gpu_scoring(self):
-        """Setup GPU-based statistical scoring."""
-        try:
-            # Load frequency data to GPU
-            letter_freqs = self.statistical_analyzer.letter_frequencies
-            bigram_freqs = self.statistical_analyzer.bigram_frequencies
-            
-            # Convert to GPU arrays for fast scoring
-            self.gpu_letter_freqs = cp.array([letter_freqs.get(chr(i + ord('A')), 0.0001) for i in range(26)])
-            
-            # Create bigram frequency lookup table
-            bigram_lookup = np.zeros((26, 26), dtype=np.float32)
-            for bigram, freq in bigram_freqs.items():
-                if len(bigram) == 2:
-                    i, j = ord(bigram[0]) - ord('A'), ord(bigram[1]) - ord('A')
-                    if 0 <= i < 26 and 0 <= j < 26:
-                        bigram_lookup[i, j] = freq
-            
-            self.gpu_bigram_freqs = cp.array(bigram_lookup)
-            
-            logger.info("GPU-based scoring initialized")
-            
-        except Exception as e:
-            logger.warning(f"GPU scoring setup failed: {e}")
     
     def _compile_gpu_kernels(self):
         """Pre-compile GPU kernels for maximum performance."""
@@ -124,7 +98,7 @@ class FullyOptimizedCudaHillBreaker:
     def break_cipher_fully_optimized(self, ciphertext: str, 
                                    max_keys: int = 50000,
                                    batch_size: int = 4096,
-                                   early_stopping_score: float = -1000) -> Dict:
+                                   early_stopping_score: float = -100) -> Dict:
         """Break Hill cipher using fully optimized GPU processing."""
         
         if not self.cuda_available:
@@ -202,7 +176,7 @@ class FullyOptimizedCudaHillBreaker:
         }
     
     def _process_fully_parallel_gpu_batch(self, cipher_gpu: cp.ndarray, key_batch: List[np.ndarray]) -> List[Tuple[float, str]]:
-        """Process batch with full GPU parallelism - matrices, decryption, and scoring."""
+        """Process batch with GPU parallelism for matrices, CPU for accurate scoring."""
         batch_size = len(key_batch)
         
         try:
@@ -210,24 +184,21 @@ class FullyOptimizedCudaHillBreaker:
             keys_array = np.stack(key_batch)  # Shape: (batch_size, key_size, key_size)
             keys_gpu = cp.asarray(keys_array)
             
-            # Parallel batch matrix inversion and decryption
+            # Parallel batch matrix inversion and decryption on GPU
             all_decrypted, valid_mask = self._gpu_batch_decrypt_parallel(cipher_gpu, keys_gpu)
             
-            # Parallel GPU-based scoring
-            scores = self._gpu_batch_score_parallel(all_decrypted, valid_mask)
-            
-            # Convert results back to CPU
-            scores_cpu = cp.asnumpy(scores)
+            # Convert results back to CPU for accurate statistical analysis
             all_decrypted_cpu = cp.asnumpy(all_decrypted)
             valid_mask_cpu = cp.asnumpy(valid_mask)
             
-            # Build results
+            # Build results with CPU-based scoring for accuracy
             results = []
             for batch_idx in range(batch_size):
                 if valid_mask_cpu[batch_idx]:
                     decrypted_nums = all_decrypted_cpu[batch_idx]
                     decrypted_text = ''.join(chr(int(c) + ord('A')) for c in decrypted_nums)
-                    score = float(scores_cpu[batch_idx])
+                    # Use CPU-based statistical analyzer for accurate Portuguese scoring
+                    score = self.statistical_analyzer.score_text(decrypted_text)
                     results.append((score, decrypted_text))
                 else:
                     results.append((float('-inf'), ''))
@@ -235,7 +206,7 @@ class FullyOptimizedCudaHillBreaker:
             return results
             
         except Exception as e:
-            logger.warning(f"Fully parallel GPU processing failed: {e}, using fallback")
+            logger.warning(f"GPU batch processing failed: {e}, using fallback")
             # Fallback to individual processing
             results = []
             for key in key_batch:
@@ -304,52 +275,6 @@ class FullyOptimizedCudaHillBreaker:
         result = decrypted_blocks.flatten()[:text_length]
         
         return result
-    
-    def _gpu_batch_score_parallel(self, all_decrypted: cp.ndarray, valid_mask: cp.ndarray) -> cp.ndarray:
-        """Parallel GPU-based statistical scoring for all decrypted texts."""
-        batch_size = all_decrypted.shape[0]
-        scores = cp.full(batch_size, float('-inf'), dtype=cp.float32)
-        
-        for batch_idx in range(batch_size):
-            if not valid_mask[batch_idx]:
-                continue
-            
-            try:
-                decrypted_text = all_decrypted[batch_idx]
-                
-                # GPU-based frequency scoring
-                score = self._gpu_score_text_fast(decrypted_text)
-                scores[batch_idx] = score
-                
-            except Exception:
-                scores[batch_idx] = float('-inf')
-        
-        return scores
-    
-    def _gpu_score_text_fast(self, text_gpu: cp.ndarray) -> float:
-        """Fast GPU-based text scoring using frequency analysis."""
-        try:
-            # Letter frequency scoring
-            letter_counts = cp.bincount(text_gpu, minlength=26)
-            letter_freqs = letter_counts / len(text_gpu)
-            letter_score = -cp.sum((letter_freqs - self.gpu_letter_freqs) ** 2)
-            
-            # Bigram frequency scoring (simplified for speed)
-            if len(text_gpu) > 1:
-                bigram_indices = text_gpu[:-1] * 26 + text_gpu[1:]
-                bigram_counts = cp.bincount(bigram_indices, minlength=676)
-                bigram_freqs = bigram_counts / (len(text_gpu) - 1)
-                
-                # Simplified bigram scoring
-                bigram_score = -cp.sum(bigram_freqs ** 2) * 1000
-            else:
-                bigram_score = 0
-            
-            total_score = float(letter_score + bigram_score)
-            return total_score
-            
-        except Exception:
-            return float('-inf')
     
     def _gpu_matrix_inverse_mod26_fast(self, matrix: cp.ndarray, det_int: int) -> cp.ndarray:
         """Fast GPU matrix inverse modulo 26."""
