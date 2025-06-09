@@ -1,10 +1,10 @@
 # Fully Optimized Hill Cipher Overnight Breaking Session
 # PowerShell script for maximum GPU utilization
 
-Write-Host "🚀 Fully Optimized Hill Cipher Overnight Breaking Session" -ForegroundColor Cyan
+Write-Host "Fully Optimized Hill Cipher Overnight Breaking Session" -ForegroundColor Cyan
 Write-Host "=========================================================" -ForegroundColor Cyan
-Write-Host "🔥 Maximum GPU utilization (80-95% expected)" -ForegroundColor Yellow
-Write-Host "⚡ Fully optimized CUDA breaker with parallel processing" -ForegroundColor Yellow
+Write-Host "Maximum GPU utilization (80-95% expected)" -ForegroundColor Yellow
+Write-Host "Fully optimized CUDA breaker with parallel processing" -ForegroundColor Yellow
 Write-Host ""
 
 Write-Host "This optimized version will:" -ForegroundColor Green
@@ -27,8 +27,8 @@ Write-Host "Results will be saved in overnight_results/" -ForegroundColor Green
 Write-Host "Logs will be saved in overnight_results/logs/" -ForegroundColor Green
 Write-Host ""
 
-Write-Host "⚠️  Monitor GPU usage with: nvidia-smi -l 1" -ForegroundColor Red
-Write-Host "⚠️  Expected GPU utilization: 80-95%" -ForegroundColor Red
+Write-Host "Monitor GPU usage with: nvidia-smi -l 1" -ForegroundColor Red
+Write-Host "Expected GPU utilization: 80-95%" -ForegroundColor Red
 Write-Host ""
 
 $confirmation = Read-Host "Press Enter to start fully optimized session or Ctrl+C to cancel"
