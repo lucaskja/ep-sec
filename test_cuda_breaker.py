@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for fully optimized CUDA breaker
+Test script for fully optimized CUDA Hill cipher breaker
 This should achieve 80-95% GPU utilization
 
 Author: Lucas Kledeglau Jahchan Alves
@@ -9,13 +9,13 @@ Author: Lucas Kledeglau Jahchan Alves
 import sys
 import subprocess
 
-def test_fully_optimized():
+def test_cuda_breaker():
     """Test the fully optimized CUDA breaker"""
     
     print("=" * 60)
     print("FULLY OPTIMIZED CUDA HILL CIPHER BREAKER TEST")
     print("=" * 60)
-    print("This version should achieve 80-95% GPU utilization!")
+    print("This should achieve 80-95% GPU utilization!")
     print()
     
     # Test ciphertext
@@ -87,4 +87,4 @@ def test_fully_optimized():
     print("might be in CPU-GPU memory transfers or other factors.")
 
 if __name__ == "__main__":
-    test_fully_optimized()
+    test_cuda_breaker()
