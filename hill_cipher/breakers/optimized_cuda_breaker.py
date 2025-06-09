@@ -29,7 +29,7 @@ try:
     import cupy as cp
     CUDA_AVAILABLE = True
     CUDA_LIB = 'cupy'
-    print("✅ CuPy available - GPU acceleration enabled")
+    print("[OK] CuPy available - GPU acceleration enabled")
 except ImportError:
     try:
         import pycuda.driver as cuda
@@ -38,9 +38,9 @@ except ImportError:
         import pycuda.gpuarray as gpuarray
         CUDA_AVAILABLE = True
         CUDA_LIB = 'pycuda'
-        print("✅ PyCUDA available - GPU acceleration enabled")
+        print("[OK] PyCUDA available - GPU acceleration enabled")
     except ImportError:
-        print("⚠️  No CUDA library available - falling back to CPU")
+        print("[WARNING] No CUDA library available - falling back to CPU")
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -414,7 +414,7 @@ def main():
     
     args = parser.parse_args()
     
-    print(f"🔓 Optimized CUDA Hill Cipher Breaker")
+    print(f"[OPTIMIZED] CUDA Hill Cipher Breaker")
     print(f"Breaking {args.key_size}x{args.key_size} Hill cipher...")
     print(f"GPU acceleration: {'Enabled' if CUDA_AVAILABLE else 'Disabled'}")
     
