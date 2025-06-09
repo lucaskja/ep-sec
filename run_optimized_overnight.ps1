@@ -1,10 +1,10 @@
 # Optimized Hill Cipher Overnight Breaking Session
 # PowerShell script for maximum GPU utilization
 
-Write-Host "🚀 Optimized Hill Cipher Overnight Breaking Session" -ForegroundColor Cyan
+Write-Host "Optimized Hill Cipher Overnight Breaking Session" -ForegroundColor Cyan
 Write-Host "====================================================" -ForegroundColor Cyan
-Write-Host "🔥 GPU-optimized with large batch processing" -ForegroundColor Yellow
-Write-Host "⚡ Maximum RTX 4060 Ti utilization" -ForegroundColor Yellow
+Write-Host "GPU-optimized with large batch processing" -ForegroundColor Yellow
+Write-Host "Maximum RTX 4060 Ti utilization" -ForegroundColor Yellow
 Write-Host ""
 
 Write-Host "This optimized version will:" -ForegroundColor Green
@@ -24,8 +24,8 @@ Write-Host "Results will be saved in optimized_overnight_results/" -ForegroundCo
 Write-Host "Logs will be saved in optimized_overnight_results/logs/" -ForegroundColor Green
 Write-Host ""
 
-Write-Host "⚠️  Make sure your GPU drivers are up to date!" -ForegroundColor Red
-Write-Host "⚠️  Monitor GPU temperature during long runs!" -ForegroundColor Red
+Write-Host "Make sure your GPU drivers are up to date!" -ForegroundColor Red
+Write-Host "Monitor GPU temperature during long runs!" -ForegroundColor Red
 Write-Host ""
 
 $confirmation = Read-Host "Press Enter to start optimized session or Ctrl+C to cancel"
